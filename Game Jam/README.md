@@ -1,12 +1,19 @@
 # STILL//MOVING — The Last Flame
 
 ## Requisitos
-- Windows de 64 bits y una tarjeta gráfica compatible con OpenGL 3.3.
-- No necesitas instalar Godot, descargar assets ni tener conexión a Internet: el motor está incluido en `.runtime`.
-- Conserva todos los archivos y carpetas del proyecto juntos.
+- Godot **4.7.x** (probado en 4.7.2) y una GPU compatible con OpenGL 3.3 o superior.
+- Windows, Linux o macOS. Este repositorio contiene todo el código, salas, audio y arte; no depende de rutas personales ni de archivos importados locales.
+- Godot no se versiona dentro del repositorio. Cada integrante debe instalar la misma versión de Godot o usar una copia privada opcional en `.runtime/`.
+- Conserva todos los archivos y carpetas del proyecto juntos; abre la carpeta que contiene `project.godot`, no sólo una escena suelta.
 
 ## Jugar
-Abre **Play.cmd** y pulsa **Enter**. La campaña tiene cuatro niveles y el jefe final Pyrax.
+
+En Windows abre **Play.cmd**. Busca primero una copia opcional en `.runtime` y,
+si no existe, usa `Godot.exe`/`godot.exe` desde `PATH`.
+
+En Linux o macOS ejecuta `./play.sh` desde una terminal. También puedes importar
+`project.godot` en Godot y pulsar F6/F5. La campaña tiene cuatro niveles y el
+jefe final Pyrax.
 
 ## Controles
 - A/D o flechas: moverse.
@@ -21,7 +28,9 @@ Abre **Play.cmd** y pulsa **Enter**. La campaña tiene cuatro niveles y el jefe 
 Moverse hace avanzar el mundo; detenerse lo congela. Los peligros congelados siguen haciendo daño.
 
 ## Editar niveles
-Abre **Open Editor.cmd**. Los cuatro niveles están en `rooms`.
+
+En Windows abre **Open Editor.cmd**; en Linux o macOS ejecuta `./open_editor.sh`.
+Los cuatro niveles están en `rooms`.
 Selecciona **Floors** para pintar tiles y arrastra enemigos u objetos desde `assets`.
 **Ctrl+S** guarda, **F6** prueba el nivel, **F8** detiene y **F5** inicia la campaña.
 Más detalles en **LEVEL-DESIGN.md**.
@@ -44,7 +53,7 @@ Regla clave: todo lo que vive bajo `world` avanza con el delta de mundo que
 
 ## Pruebas
 
-Con Godot 4.7 en el PATH, desde esta carpeta:
+Con Godot 4.7.x en el PATH, desde esta carpeta:
 
 ```
 godot --headless --script res://tests/core_tests.gd
@@ -87,10 +96,10 @@ escena, **F8** detiene, **F5** juega la campaña. Vuelve a la ventana del juego 
 pulsa **Volver al menú**; al iniciar otra partida se cargan las escenas guardadas.
 Consulta [LEVEL-DESIGN.md](LEVEL-DESIGN.md) para los detalles de autoría.
 
-Linux (Godot 4.6.2 o compatible, OpenGL Compatibility):
+Linux/macOS (Godot 4.7.x, renderer OpenGL Compatibility):
 
 ```bash
-godot --path "$HOME/Downloads/game-jam-2026/Game Jam"
+godot4 --path "/ruta/al/game-jam-2026/Game Jam"
 ```
 
 Arte y procedencia: [assets/story/ARTWORK.md](assets/story/ARTWORK.md).
