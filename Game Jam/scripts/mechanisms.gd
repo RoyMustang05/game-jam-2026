@@ -237,8 +237,6 @@ func _draw() -> void:
 		for x in range(int(rect.position.x) + 5, int(rect.end.x), 12):
 			var offset := fposmod(world_time * float(field.multiplier) * 5.0 + float(x % 19), maxf(1, rect.size.y - 6))
 			draw_rect(Rect2(x, rect.position.y + 3 + floorf(offset), 2, 2), Color(tint, 0.25))
-		var text := "0.5x FIELD" if float(field.multiplier) < 1.0 else "1.5x FIELD"
-		draw_string(ThemeDB.fallback_font, rect.position + Vector2(3, 8), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 7, tint)
 	for barrier in barriers:
 		if bool(barrier.broken):
 			continue
@@ -289,6 +287,13 @@ func _draw() -> void:
 		var diamond := PackedVector2Array([p + Vector2(0, -26), p + Vector2(6, -20), p + Vector2(0, -14), p + Vector2(-6, -20), p + Vector2(0, -26)])
 		draw_polyline(diamond, WHITE if float(anchor.flash) > 0.0 else CYAN, 1)
 		draw_rect(Rect2(p + Vector2(-1, -21), Vector2(2, 2)), WHITE)
-		draw_string(ThemeDB.fallback_font, p + Vector2(-13, -29), "ANCHOR", HORIZONTAL_ALIGNMENT_LEFT, -1, 7, CYAN)
 	for particle in particles:
 		draw_rect(Rect2(Vector2(particle.pos).round(), Vector2(2, 2)), Color(particle.color, clampf(float(particle.life) * 3.0, 0.0, 1.0)))
+
+func draw_labels(canvas: Node2D) -> void:
+	# Called by the window-resolution overlay, with the world camera transform.
+	for field in fields:
+		var text := "0.5x FIELD" if float(field.multiplier) < 1.0 else "1.5x FIELD"
+		canvas.draw_string(ThemeDB.fallback_font, Rect2(field.rect).position + Vector2(3, 8), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, CYAN if float(field.multiplier) < 1.0 else PINK)
+	for anchor in anchors:
+		canvas.draw_string(ThemeDB.fallback_font, Vector2(anchor.pos) + Vector2(-16, -29), "ANCHOR", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, CYAN)

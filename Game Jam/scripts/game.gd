@@ -15,7 +15,8 @@ const CYAN = Color("61e7ff")
 const PINK = Color("ff5fcb")
 const RED = Color("ff5a67")
 const GOLD = Color("ffd15c")
-const MUTED = Color("75818c")
+const MUTED = Color("a6b3bf")
+const WORLD_SIZE = Vector2i(320, 180)
 
 var playtest_room_path: String = ""
 var authored_room: Node2D
@@ -32,6 +33,8 @@ var level_index: int = 0
 var chapter_index: int = 0
 var data: Dictionary = {}
 var world: Node2D
+var world_viewport: SubViewport
+var world_labels: Node2D
 var geometry: Node2D
 var player: CharacterBody2D
 var hazards: Node2D
@@ -73,16 +76,34 @@ var font: Font = ThemeDB.fallback_font
 
 func _ready() -> void:
 	_register_inputs()
+	# Only the world is rasterized at 320x180. The root canvas keeps these
+	# logical coordinates but renders UI/font outlines at the window resolution.
+	world_viewport = SubViewport.new()
+	world_viewport.size = WORLD_SIZE
+	world_viewport.world_2d = World2D.new()
+	world_viewport.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+	world_viewport.snap_2d_transforms_to_pixel = true
+	world_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(world_viewport)
+	var world_image := Sprite2D.new()
+	world_image.texture = world_viewport.get_texture()
+	world_image.centered = false
+	world_image.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	world_image.z_index = -1
+	add_child(world_image)
 	world = Node2D.new()
-	add_child(world)
+	world_viewport.add_child(world)
 	camera = Camera2D.new()
 	camera.enabled = false
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 7.0
 	camera.process_callback = Camera2D.CAMERA2D_PROCESS_IDLE
-	add_child(camera)
+	world_viewport.add_child(camera)
 	var interface_layer := CanvasLayer.new()
 	add_child(interface_layer)
+	world_labels = Node2D.new()
+	interface_layer.add_child(world_labels)
+	world_labels.draw.connect(_draw_world_labels)
 	hud = Node2D.new()
 	interface_layer.add_child(hud)
 	hud.draw.connect(_draw_hud)
@@ -259,6 +280,7 @@ func _process(delta: float) -> void:
 		camera.offset = Vector2(roundf(sin(ui_time * 160.0) * death_flash * 1.5), 0)
 	if is_instance_valid(geometry):
 		geometry.queue_redraw()
+	world_labels.queue_redraw()
 	hud.queue_redraw()
 	if state == "menu" or state == "complete":
 		queue_redraw()
@@ -419,6 +441,21 @@ func _center(canvas: Node2D, y: float, value: String, size: int = 8, color: Colo
 	var length: float = font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 	_text(canvas, Vector2(roundf((320.0 - length) / 2.0), y), value, size, color)
 
+func _paragraph(value: String, width: float, size: int = 9) -> TextParagraph:
+	var paragraph := TextParagraph.new()
+	paragraph.add_string(value, font, size)
+	paragraph.width = width
+	paragraph.break_flags = TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
+	return paragraph
+
+func _instruction(y: float, value: String, color: Color = GOLD) -> float:
+	var paragraph := _paragraph(value, 284)
+	paragraph.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var height: float = paragraph.get_size().y + 8
+	hud.draw_rect(Rect2(10, y, 300, height), Color(INK, 0.96))
+	paragraph.draw(hud.get_canvas_item(), Vector2(18, y + 4), color)
+	return y + height
+
 func _draw() -> void:
 	if state != "menu":
 		return
@@ -439,16 +476,16 @@ func _draw() -> void:
 	draw_line(origin, origin + Vector2(22, 12), CYAN, 2)
 	draw_rect(Rect2(origin - Vector2(2, 2), Vector2(4, 4)), PINK)
 	draw_rect(Rect2(15, 18, 4, 4), CYAN)
-	_text(self, Vector2(24, 23), "CHRONOPHOBIA / FOUR FRACTURED EPOCHS", 7, MUTED)
+	_text(self, Vector2(24, 23), "CHRONOPHOBIA / FOUR FRACTURED EPOCHS", 8, MUTED)
 	_text(self, Vector2(14, 65), "STILL", 31)
 	_text(self, Vector2(91, 64), "//", 31, CYAN)
 	_text(self, Vector2(14, 93), "MOVING", 31)
 	draw_rect(Rect2(15, 102, 28, 2), PINK)
 	_text(self, Vector2(15, 116), "THE TIME IS NOT YOURS.", 9, CYAN)
-	_text(self, Vector2(15, 130), "Move to create time. Stop to survive.", 8)
+	_text(self, Vector2(15, 130), "Move to create time. Stop to survive.", 9)
 	_text(self, Vector2(15, 151), "[ ENTER / SPACE ]  BEGIN", 9, GOLD)
 	draw_line(Vector2(15, 160), Vector2(305, 160), Color("2a3540"))
-	_text(self, Vector2(15, 172), "A D  MOVE   SPACE  JUMP   SHIFT  DASH   X  FOCUS", 7, MUTED)
+	_text(self, Vector2(15, 172), "A/D MOVE   SPACE JUMP   SHIFT DASH   X FOCUS   J STRIKE", 8, MUTED)
 	_text(self, Vector2(278, 151), "01 / 04", 7, CYAN)
 
 func _draw_level() -> void:
@@ -476,7 +513,6 @@ func _draw_level() -> void:
 		geometry.draw_rect(Rect2(goal + Vector2(-6, -25), Vector2(12, 25)), Color("214752"), false, 1)
 		geometry.draw_line(goal + Vector2(-3, -18), goal + Vector2(3, -14), WHITE)
 		geometry.draw_line(goal + Vector2(3, -14), goal + Vector2(-3, -10), WHITE)
-		_text(geometry, goal + Vector2(-10, -34), "CORE" if level_index == 3 else "EXIT", 7, GOLD)
 		if level_index == 3:
 			geometry.draw_arc(goal + Vector2(0, -14), 23, 0.2, 6.0, 24, PINK, 1)
 			geometry.draw_arc(goal + Vector2(0, -14), 27, 2.0, 4.9, 14, CYAN, 1)
@@ -490,17 +526,26 @@ func _draw_level() -> void:
 		geometry.draw_line(arrow - direction * 3, arrow + direction * 3, Color("397482"))
 		geometry.draw_line(arrow + direction * 3, arrow + direction.orthogonal() * 2, Color("397482"))
 		geometry.draw_line(arrow + direction * 3, arrow - direction.orthogonal() * 2, Color("397482"))
-	for sign_data: Dictionary in data.get("signs", []):
-		var sign_pos: Vector2 = sign_data.pos
-		var content: String = sign_data.text
-		var sign_width: float = font.get_string_size(content, HORIZONTAL_ALIGNMENT_LEFT, -1, 7).x
-		geometry.draw_rect(Rect2(sign_pos + Vector2(-3, -8), Vector2(sign_width + 6, 12)), Color(INK, 0.92))
-		_text(geometry, sign_pos, content, 7, GOLD)
 	# Sparse world particles share the exact simulation clock.
 	for n in range(22):
 		var x: float = fposmod(float(n * 71) + level_world * (2.0 + n % 3), float(data.width))
 		var y: float = 47.0 + fposmod(float(n * 23) - level_world * 2.0, 92.0)
 		geometry.draw_rect(Rect2(roundf(x), roundf(y), 1, 1), Color(CYAN, 0.3))
+
+func _draw_world_labels() -> void:
+	if data.is_empty() or state == "menu":
+		return
+	# Match the pixel viewport's camera, including zoom, limits and shake.
+	world_labels.draw_set_transform_matrix(world.get_global_transform_with_canvas())
+	if not bool(data.get("boss", false)):
+		_text(world_labels, Vector2(data.goal) + Vector2(-10, -34), "CORE" if level_index == 3 else "EXIT", 8, GOLD)
+	for sign_data: Dictionary in data.get("signs", []):
+		var paragraph := _paragraph(String(sign_data.text), 260, 8)
+		var pos: Vector2 = Vector2(sign_data.pos) - Vector2(0, 8)
+		world_labels.draw_rect(Rect2(pos - Vector2(3, 2), paragraph.get_size() + Vector2(6, 4)), Color(INK, 0.96))
+		paragraph.draw(world_labels.get_canvas_item(), pos, GOLD)
+	mechanisms.draw_labels(world_labels)
+	world_labels.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 func _timer(value: float) -> String:
 	var centis: int = maxi(0, int(ceil(value * 100.0)))
@@ -511,32 +556,31 @@ func _draw_hud() -> void:
 		return
 	hud.draw_rect(Rect2(0, 0, 320, 28), INK)
 	hud.draw_line(Vector2(8, 27), Vector2(312, 27), Color("263740"))
-	_text(hud, Vector2(8, 8), "REMAINING", 6, MUTED)
-	_text(hud, Vector2(8, 22), _timer(remaining), 14, RED if remaining < 5.0 else WHITE)
-	_text(hud, Vector2(109, 11), "%02d / 04" % (level_index + 1), 7, GOLD)
-	_text(hud, Vector2(109, 21), String(data.title), 7, WHITE)
-	_text(hud, Vector2(249, 10), "TIME FROZEN" if frozen else "TIME MOVING", 8, CYAN if frozen else MUTED)
-	_text(hud, Vector2(247, 22), "DASH", 6, MUTED)
+	_text(hud, Vector2(8, 9), "REMAINING", 8, MUTED)
+	_text(hud, Vector2(8, 24), _timer(remaining), 14, RED if remaining < 5.0 else WHITE)
+	_text(hud, Vector2(109, 10), "%02d / 04" % (level_index + 1), 8, GOLD)
+	_text(hud, Vector2(109, 23), String(data.title), 9, WHITE)
+	_text(hud, Vector2(247, 10), "TIME FROZEN" if frozen else "TIME MOVING", 9, CYAN if frozen else WHITE)
+	_text(hud, Vector2(247, 23), "DASH", 8, MUTED)
 	for i in range(2):
 		var rect := Rect2(273 + i * 19, 16, 15, 6)
-		hud.draw_rect(rect, CYAN if i < player.dash_charges else Color("263740"), i < player.dash_charges)
+		hud.draw_rect(rect, CYAN if i < player.dash_charges else MUTED, i < player.dash_charges)
 		if i < player.dash_charges:
 			hud.draw_line(rect.position + Vector2(5, 1), rect.position + Vector2(8, 3), INK)
 			hud.draw_line(rect.position + Vector2(8, 3), rect.position + Vector2(5, 5), INK)
 	hud.draw_rect(Rect2(0, 164, 320, 16), INK)
 	hud.draw_line(Vector2(8, 164), Vector2(312, 164), Color("263740"))
 	_draw_epoch_icon(hud, Vector2(12, 172))
-	_text(hud, Vector2(21, 175), String(data.epoch).to_upper(), 7, CYAN)
-	_text(hud, Vector2(145, 175), "R RETRY", 7, MUTED)
-	_text(hud, Vector2(196, 175), "X FOCUS", 7, MUTED)
-	_text(hud, Vector2(253, 175), "ESC PAUSE", 7, MUTED)
+	_text(hud, Vector2(21, 175), String(data.epoch).to_upper(), 8, CYAN)
+	_text(hud, Vector2(145, 175), "R RETRY", 8, MUTED)
+	_text(hud, Vector2(196, 175), "X FOCUS", 8, MUTED)
+	_text(hud, Vector2(253, 175), "ESC PAUSE", 8, MUTED)
 	# Route progress is a quiet, continuous line above the footer.
 	var progress: float = _route_progress()
 	hud.draw_line(Vector2(8, 162), Vector2(8 + 304 * progress, 162), CYAN)
+	var notice_y: float = 54.0
 	if intro_left > 0.0 and state == "playing" and not paused:
-		var w: float = minf(300.0, font.get_string_size(String(data.hint), HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x + 14)
-		hud.draw_rect(Rect2((320 - w) / 2, 33, w, 17), Color(INK, 0.93))
-		_center(hud, 44, String(data.hint), 8, GOLD)
+		notice_y = maxf(notice_y, _instruction(33, String(data.hint)) + 4)
 	if dash_flash > 0.0:
 		_text(hud, Vector2(79, 21), "-2s", 8, PINK)
 	if field_multiplier != 1.0:
@@ -544,25 +588,25 @@ func _draw_hud() -> void:
 	elif player.extra_jumps > 0:
 		hud.draw_rect(Rect2(228, 17, 3, 3), CYAN)
 	if anchor_flash > 0.0:
-		_center(hud, 58, "ANCHOR SET / DASHES RESTORED", 8, CYAN)
+		notice_y = _instruction(notice_y, "ANCHOR SET / DASHES RESTORED", CYAN) + 4
 		hud.draw_rect(Rect2(0, 28, 320, 136), Color(CYAN, anchor_flash * 0.035))
 	if death_flash > 0.0:
 		hud.draw_rect(Rect2(0, 28, 320, 136), Color(RED, death_flash * 0.18))
-		_center(hud, 62, death_reason, 8, RED)
+		_instruction(notice_y, death_reason, RED)
 		for i in range(9):
 			var direction := Vector2(cos(float(i) * TAU / 9), sin(float(i) * TAU / 9))
 			var p: Vector2 = death_screen_position + Vector2(0, -7) + direction * (1.0 - death_flash) * 30.0
 			hud.draw_rect(Rect2(p.round(), Vector2(2, 2)), Color(WHITE if i % 3 == 0 else RED, death_flash))
 	if is_instance_valid(dragon) and dragon.active:
 		hud.draw_rect(Rect2(53,29,214,23),Color(INK,0.95))
-		_center(hud,37,"PYRAX / THE LAST FLAME / II" if dragon.phase == 2 else "PYRAX / THE LAST FLAME / I",7,GOLD)
+		_center(hud,38,"PYRAX / THE LAST FLAME / II" if dragon.phase == 2 else "PYRAX / THE LAST FLAME / I",8,GOLD)
 		for n in range(8): hud.draw_rect(Rect2(85+n*19,41,16,3),RED if n < dragon.health else Color("30333d"))
 		var cue: String = {"prepare":"READ THE DRAGON / MOVE TO ADVANCE", "warning":["BREATH: HIGH LEDGE OR FAR LEFT","VOLLEY: SPACED LANES / FLOOR IS SAFE","CLAW: LEAVE THE GOLD MARK"][dragon.attack], "attack":["FIRE IS SOLID / USE HEIGHT","EMBER LANES / STOP TO PLAN","JUMP THE GROUND WAVE"][dragon.attack], "recover":"OPEN HEAD: J STRIKE / CYAN CELL REFILLS", "transition":"PHASE II / THE FURNACE AWAKENS", "defeat":"THE LAST FLAME FALLS"}.get(dragon.state,"")
 		hud.draw_rect(Rect2(0,165,320,15),INK)
-		_center(hud,175,cue,7,CYAN if dragon.state == "recover" else GOLD)
+		_center(hud,175,cue,8,CYAN if dragon.state == "recover" else GOLD)
 	if paused:
-		_panel("PAUSED", "JUMP x2 Â· WALL + JUMP Â· DOWN + SHIFT", "ENTER / ESC  RESUME", CYAN)
-		_center(hud, 149, "HOLD X IN AIR TO FREEZE AND PLAN", 7, CYAN)
+		_panel("PAUSED", "SPACE: JUMP x2 / WALL + JUMP\nDOWN + SHIFT: STRIKE / J: MELEE", "ENTER / ESC  RESUME", CYAN)
+		_center(hud, 149, "HOLD X IN AIR TO FREEZE AND PLAN", 9, CYAN)
 	elif state == "clear":
 		_panel("TIMELINE RESTORED", "%s  /  %.2fs active" % [String(data.title), level_world], "ENTER / SPACE  NEXT ROOM", GOLD)
 	elif state == "complete":
@@ -584,17 +628,20 @@ func _draw_epoch_icon(canvas: Node2D, p: Vector2) -> void:
 
 func _panel(title: String, detail: String, prompt: String, color: Color) -> void:
 	hud.draw_rect(Rect2(0, 28, 320, 136), Color(INK, 0.85))
-	hud.draw_rect(Rect2(36, 61, 248, 72), INK)
-	hud.draw_line(Vector2(36, 61), Vector2(284, 61), color)
-	_center(hud, 84, title, 15, color)
-	_center(hud, 103, detail, 8)
-	_center(hud, 121, prompt, 8, GOLD)
+	var paragraph := _paragraph(detail, 264)
+	paragraph.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var prompt_y: float = 92 + paragraph.get_size().y + 15
+	hud.draw_rect(Rect2(20, 57, 280, prompt_y - 57 + 9), INK)
+	hud.draw_line(Vector2(20, 57), Vector2(300, 57), color)
+	_center(hud, 80, title, 15, color)
+	paragraph.draw(hud.get_canvas_item(), Vector2(28, 92), WHITE)
+	_center(hud, prompt_y, prompt, 9, GOLD)
 
 func _draw_completion() -> void:
 	hud.draw_rect(Rect2(0, 0, 320, 180), INK)
 	hud.draw_line(Vector2(20, 15), Vector2(300, 15), CYAN)
 	_center(hud, 32, "THE LAST FLAME IS STILL", 13, WHITE)
-	_center(hud, 46, "And for a moment, time belonged to you.", 8, CYAN)
+	_center(hud, 46, "And for a moment, time belonged to you.", 9, CYAN)
 	var par_time: float = 0.0
 	for i in range(ROOM_COUNT):
 		par_time += float(Levels.build(i).get("par_time", 60.0))
@@ -604,11 +651,12 @@ func _draw_completion() -> void:
 	var values: Array[String] = ["%.2f s" % total_world, _timer(total_real), "%.1f m" % (total_distance / 16.0), str(total_deaths), "%d / %.0fs" % [total_dashes, total_dash_cost]]
 	for i in range(labels.size()):
 		var y: float = 83 + i * 13
-		_text(hud, Vector2(51, y), labels[i], 8, MUTED)
-		_text(hud, Vector2(217, y), values[i], 8, WHITE)
+		_text(hud, Vector2(40, y), labels[i], 9, MUTED)
+		var value_width: float = font.get_string_size(values[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
+		_text(hud, Vector2(280 - value_width, y), values[i], 9, WHITE)
 	hud.draw_line(Vector2(51, 142), Vector2(269, 142), Color("263740"))
 	_center(hud, 158, "PRESS ENTER TO REPLAY", 10, GOLD)
-	_center(hud, 173, "STILL//MOVING    Â·    CHRONOPHOBIA", 7, CYAN)
+	_center(hud, 173, "STILL//MOVING    /    CHRONOPHOBIA", 8, CYAN)
 
 func _make_sounds() -> void:
 	for name: String in ["jump", "double_jump", "wall_jump", "land", "dash", "strike", "bounce", "break", "anchor", "freeze", "hit", "goal"]:
