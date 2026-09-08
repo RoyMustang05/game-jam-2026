@@ -1,5 +1,10 @@
 extends CharacterBody2D
 ## Normal physics for Milo; the game advances its separate clock from step().
+## Drawing lives in milo_figure.gd and the trail/particles in player_effects.gd,
+## so this file stays about movement.
+const Figure = preload("res://scripts/actors/milo_figure.gd")
+const PlayerEffects = preload("res://scripts/actors/player_effects.gd")
+
 const RUN_SPEED: float = 105.0
 const ACCELERATION: float = 1300.0
 const FRICTION: float = 1800.0
@@ -19,7 +24,6 @@ const WHITE: Color = Color("f8f8f2")
 const CYAN: Color = Color("61e7ff")
 const MAGENTA: Color = Color("ff5fcb")
 const RED: Color = Color("ff5a67")
-const INK: Color = Color("0d1013")
 
 var melee_pose: float = 0.0
 var dash_charges: int = 2
@@ -47,19 +51,16 @@ var _jump_cut_lock: float = 0.0
 var _focus_velocity: Vector2 = Vector2.ZERO
 var _motion_clock: float = 0.0
 var _visual_clock: float = 0.0
-var _trail_clock: float = 0.0
 var _last_axis: float = 0.0
 var _special_state: String = ""
 var _special_left: float = 0.0
 var _spawn_left: float = 0.25
-var _impact_left: float = 0.0
 var _hit_left: float = 0.0
 var _death_left: float = 0.0
 var _finished: bool = false
 var _dead: bool = false
 var _pending_action: String = ""
-var _trail: Array[Dictionary] = []
-var _particles: Array[Dictionary] = []
+var effects := PlayerEffects.new()
 
 
 func _ready() -> void:
@@ -122,19 +123,16 @@ func reset_at(spawn_position: Vector2) -> void:
 	_jump_cut_lock = 0.0
 	_focus_velocity = Vector2.ZERO
 	_motion_clock = 0.0
-	_trail_clock = 0.0
 	_last_axis = 0.0
 	_special_state = ""
 	_special_left = 0.0
 	_spawn_left = 0.25
-	_impact_left = 0.0
 	_hit_left = 0.0
 	_death_left = 0.0
 	_finished = false
 	_dead = false
 	_pending_action = ""
-	_trail.clear()
-	_particles.clear()
+	effects.clear()
 	animation_state = "respawn"
 	reset_physics_interpolation()
 	queue_redraw()
@@ -147,7 +145,7 @@ func can_phase() -> bool:
 func refill_at_anchor() -> void:
 	dash_charges = 2
 	_spawn_left = 0.20
-	_emit_burst(Vector2.UP, CYAN, 12, 40.0)
+	_burst(Vector2.UP, CYAN, 12, 40.0)
 	queue_redraw()
 
 
@@ -169,8 +167,8 @@ func bounce_from_pad(strength: float = 270.0) -> void:
 	_coyote_left = 0.0
 	_pending_action = "bounce"
 	_special("bounce", 0.15)
-	_impact_left = 0.18
-	_emit_burst(Vector2.UP, CYAN, 16, 65.0)
+	effects.impact_left = PlayerEffects.IMPACT_DURATION
+	_burst(Vector2.UP, CYAN, 16, 65.0)
 	active_motion = true
 	queue_redraw()
 
@@ -275,7 +273,7 @@ func step(delta: float, command: Dictionary = {}) -> Dictionary:
 		dash_started = true
 		wall_clinging = false
 		_wall_hold_time = 0.0
-		_trail_clock = 0.0
+		effects.begin_trail()
 		if vertical > 0.5 and not was_grounded:
 			striking = true
 			_strike_left = STRIKE_DURATION
@@ -283,7 +281,7 @@ func step(delta: float, command: Dictionary = {}) -> Dictionary:
 			_dash_direction = Vector2.DOWN
 			velocity = Vector2(0.0, STRIKE_SPEED)
 			action = "strike"
-			_emit_burst(Vector2.UP, MAGENTA, 8, 35.0)
+			_burst(Vector2.UP, MAGENTA, 8, 35.0)
 		else:
 			_dash_direction = Vector2(axis, vertical).normalized()
 			if _dash_direction == Vector2.ZERO:
@@ -291,7 +289,7 @@ func step(delta: float, command: Dictionary = {}) -> Dictionary:
 			_phase_left = DASH_DURATION
 			velocity = _dash_direction * DASH_SPEED
 			action = "dash"
-			_emit_burst(-_dash_direction, CYAN, 8, 45.0)
+			_burst(-_dash_direction, CYAN, 8, 45.0)
 	if striking:
 		velocity = Vector2(0.0, STRIKE_SPEED)
 		_strike_left = maxf(0.0, _strike_left - delta)
@@ -326,7 +324,7 @@ func step(delta: float, command: Dictionary = {}) -> Dictionary:
 			jumped = true
 			action = "jump"
 			_special("takeoff", 0.07)
-			_emit_burst(Vector2.DOWN, CYAN, 5, 20.0)
+			_burst(Vector2.DOWN, CYAN, 5, 20.0)
 		elif _jump_buffer_left > 0.0 and wall_available:
 			velocity = Vector2(normal_x * WALL_JUMP_SPEED.x, WALL_JUMP_SPEED.y)
 			facing = 1 if normal_x > 0.0 else -1
@@ -344,7 +342,7 @@ func step(delta: float, command: Dictionary = {}) -> Dictionary:
 			jumped = true
 			action = "wall_jump"
 			_special("wall_jump", 0.13)
-			_emit_burst(Vector2(normal_x, -0.6), CYAN, 10, 42.0)
+			_burst(Vector2(normal_x, -0.6), CYAN, 10, 42.0)
 		elif _jump_buffer_left > 0.0 and extra_jumps > 0 and not was_grounded:
 			extra_jumps -= 1
 			velocity.y = DOUBLE_JUMP_SPEED
@@ -355,7 +353,7 @@ func step(delta: float, command: Dictionary = {}) -> Dictionary:
 			jumped = true
 			action = "double_jump"
 			_special("double_jump", 0.14)
-			_emit_burst(Vector2.ZERO, MAGENTA, 12, 38.0)
+			_burst(Vector2.ZERO, MAGENTA, 12, 38.0)
 		elif not jump_held and velocity.y < -82.0 and _jump_cut_lock <= 0.0:
 			velocity.y = -82.0
 	var previous_position: Vector2 = position
@@ -371,8 +369,8 @@ func step(delta: float, command: Dictionary = {}) -> Dictionary:
 			_strike_landed = true
 		if impact_speed > 50.0:
 			_special("land", 0.11)
-			_emit_burst(Vector2.UP, WHITE, 7, minf(impact_speed * 0.12, 42.0))
-			_impact_left = 0.10
+			_burst(Vector2.UP, WHITE, 7, minf(impact_speed * 0.12, 42.0))
+			effects.impact_left = 0.10
 		if action.is_empty():
 			action = "land"
 	if not is_on_wall():
@@ -385,7 +383,7 @@ func step(delta: float, command: Dictionary = {}) -> Dictionary:
 			_special("start", 0.05)
 		elif absf(old_velocity.x) > 45.0 and (absf(axis) < 0.01 or axis * old_velocity.x < 0.0) and _special_state != "skid":
 			_special("skid", 0.08)
-			_emit_burst(Vector2(-signf(old_velocity.x), -0.3), CYAN, 4, 20.0)
+			_burst(Vector2(-signf(old_velocity.x), -0.3), CYAN, 4, 20.0)
 	_last_axis = axis
 	if active_motion:
 		_advance_effects(delta, previous_position, dash_started)
@@ -433,60 +431,25 @@ func _resolve_animation() -> void:
 		animation_state = "idle"
 
 
-func _emit_burst(direction: Vector2, tint: Color, count: int, strength: float) -> void:
-	for index in range(count):
-		var angle: float = TAU * float(index) / float(maxi(count, 1)) + _motion_clock * 1.3
-		var spread: Vector2 = Vector2(cos(angle), sin(angle))
-		var drift: Vector2 = (spread * 0.65 + direction) * strength * (0.6 + float(index % 3) * 0.2)
-		var color: Color = tint if index % 3 != 0 else CYAN
-		_particles.append({"pos": position + Vector2(0, -5), "velocity": drift, "life": 0.24 + float(index % 4) * 0.03, "max_life": 0.33, "color": color})
-	while _particles.size() > 72:
-		_particles.pop_front()
+func _burst(direction: Vector2, tint: Color, count: int, strength: float) -> void:
+	effects.burst(position, direction, tint, count, strength, _motion_clock)
 
 
 func _advance_effects(delta: float, previous_position: Vector2, dash_started: bool) -> void:
 	_motion_clock += delta
-	_impact_left = maxf(0.0, _impact_left - delta)
-	for index in range(_trail.size() - 1, -1, -1):
-		var life: float = float(_trail[index].life) - delta
-		_trail[index].life = life
-		if life <= 0.0:
-			_trail.remove_at(index)
-	for index in range(_particles.size() - 1, -1, -1):
-		var particle: Dictionary = _particles[index]
-		particle.life = float(particle.life) - delta
-		particle.pos = Vector2(particle.pos) + Vector2(particle.velocity) * delta
-		particle.velocity = Vector2(particle.velocity) + Vector2(0.0, 60.0) * delta
-		if float(particle.life) <= 0.0:
-			_particles.remove_at(index)
-	if dash_left > 0.0 or dash_started or striking:
-		_trail_clock -= delta
-		if _trail_clock <= 0.0:
-			_trail.append({"position": previous_position, "facing": facing, "life": 0.19, "pose": "strike" if striking else "air_dash", "frame": int(_motion_clock * 36.0) % 8})
-			_trail_clock = 0.022
-			if _trail.size() > 8:
-				_trail.pop_front()
+	var ghosting: bool = dash_left > 0.0 or dash_started or striking
+	effects.advance(delta, previous_position, ghosting, "strike" if striking else "air_dash", facing, _motion_clock)
 
 
 func _draw() -> void:
-	for ghost in _trail:
-		var opacity: float = clampf(float(ghost.life) / 0.19, 0.0, 1.0) * 0.42
-		var tint: Color = CYAN if int(ghost.frame) % 2 == 0 else MAGENTA
-		_draw_figure((Vector2(ghost.position) - position).round(), int(ghost.facing), Color(tint, opacity), String(ghost.pose), int(ghost.frame), false)
-	for particle in _particles:
-		var local_point: Vector2 = (Vector2(particle.pos) - position).round()
-		var opacity: float = clampf(float(particle.life) / float(particle.max_life), 0.0, 1.0)
-		draw_rect(Rect2(local_point, Vector2(2, 1)), Color(Color(particle.color), opacity))
-	if _impact_left > 0.0:
-		var spread: float = roundf((0.18 - _impact_left) * 65.0)
-		draw_line(Vector2(-spread - 3, -1), Vector2(-spread, -1), Color(CYAN, _impact_left * 4.0))
-		draw_line(Vector2(spread, -1), Vector2(spread + 3, -1), Color(CYAN, _impact_left * 4.0))
+	effects.draw(self, position)
 	if animation_state == "death":
-		_draw_death()
+		Figure.death(self, clampf(1.0 - _death_left / 0.22, 0.0, 1.0))
 		return
 	var frame: int = int(_motion_clock * 19.0) % 8
 	var tint: Color = WHITE if animation_state != "hit" else RED
-	_draw_figure(Vector2.ZERO, facing, tint, "melee" if melee_pose > 0 else animation_state, frame, true)
+	var pose: String = "melee" if melee_pose > 0 else animation_state
+	Figure.figure(self, Vector2.ZERO, facing, tint, pose, frame, true, _visual_clock, wall_cling_budget)
 	if melee_pose > 0.08 and melee_pose < 0.23:
 		var center := Vector2(facing*12,-15)
 		draw_arc(center,13,-1.2 if facing > 0 else PI-1.2,1.2 if facing > 0 else PI+1.2,7,CYAN,2)
@@ -497,192 +460,3 @@ func _draw() -> void:
 		draw_rect(Rect2(-width, -16, width * 2.0, 17), Color(CYAN, alpha), false)
 		draw_line(Vector2(-width - 3, -7), Vector2(-width, -7), Color(CYAN, alpha))
 		draw_line(Vector2(width, -7), Vector2(width + 3, -7), Color(CYAN, alpha))
-
-
-func _draw_figure(origin: Vector2, direction: int, tint: Color, pose: String, frame: int, detailed: bool) -> void:
-	# Original segmented pixel silhouette: pose changes each limb and helmet.
-	var head: Vector2 = Vector2(-3, -14)
-	var torso: Rect2 = Rect2(-2, -9, 5, 5)
-	var rear_hand: Vector2 = Vector2(-4, -5)
-	var front_hand: Vector2 = Vector2(4, -5)
-	var rear_foot: Vector2 = Vector2(-2, -1)
-	var front_foot: Vector2 = Vector2(2, -1)
-	var rear_knee: Vector2 = Vector2(-2, -3)
-	var front_knee: Vector2 = Vector2(2, -3)
-	var accent: Color = CYAN
-	var head_size: Vector2 = Vector2(6, 5)
-	match pose:
-		"melee":
-			head += Vector2(2,1)
-			front_hand = Vector2(13,-12)
-			rear_hand = Vector2(-6,-5)
-			front_foot = Vector2(4,-1)
-		"idle", "respawn":
-			var breath: float = 1.0 if sin(_visual_clock * 2.8) > 0.55 else 0.0
-			head.y += breath
-			torso.position.y += breath
-			front_hand.y -= breath
-		"start":
-			head += Vector2(1, 1)
-			torso.position += Vector2(1, 1)
-			rear_hand = Vector2(-4, -6)
-			front_hand = Vector2(3, -7)
-			front_foot.x = 3
-		"run":
-			var stride: Array[Vector4] = [Vector4(-2, 0, 2, -1), Vector4(-2, -1, 1, 0), Vector4(-1, -2, 0, 0), Vector4(0, -1, -1, 0), Vector4(2, 0, -2, -1), Vector4(2, -1, -1, 0), Vector4(1, -2, 0, 0), Vector4(0, -1, 1, 0)]
-			var legs: Vector4 = stride[frame]
-			var bob: float = -1.0 if frame % 4 >= 2 else 0.0
-			head += Vector2(1, bob)
-			torso.position += Vector2(0, bob)
-			rear_foot = Vector2(-1 + legs.x, -1 + legs.y)
-			front_foot = Vector2(1 + legs.z, -1 + legs.w)
-			rear_knee = Vector2(-1 + legs.x * 0.5, -3 + legs.y)
-			front_knee = Vector2(1 + legs.z * 0.5, -3 + legs.w)
-			rear_hand = Vector2(-2 - legs.z, -6 - legs.w)
-			front_hand = Vector2(2 - legs.x, -6 - legs.y)
-		"skid":
-			head += Vector2(-1, 1)
-			torso.position += Vector2(-1, 1)
-			front_knee = Vector2(2, -3)
-			front_foot = Vector2(4, -1)
-			rear_foot = Vector2(-3, -1)
-			front_hand = Vector2(4, -7)
-			rear_hand = Vector2(-5, -7)
-		"takeoff", "land":
-			head.y += 2
-			torso.position.y += 2
-			torso.size.y = 4
-			front_knee = Vector2(3, -3)
-			rear_knee = Vector2(-3, -3)
-			front_hand = Vector2(4, -4)
-			rear_hand = Vector2(-4, -4)
-		"rise", "wall_jump", "double_jump", "bounce":
-			head.y -= 1
-			front_hand = Vector2(3, -10)
-			rear_hand = Vector2(-4, -6)
-			front_knee = Vector2(3, -5)
-			front_foot = Vector2(2, -3)
-			rear_foot = Vector2(-3, -1)
-			if pose == "wall_jump":
-				rear_hand = Vector2(-5, -10)
-				rear_foot = Vector2(-4, -3)
-			if pose == "double_jump":
-				accent = MAGENTA
-				rear_hand = Vector2(-4, -11)
-				front_hand = Vector2(4, -11)
-			if pose == "bounce":
-				torso.size.y = 6
-				front_hand = Vector2(4, -12)
-				rear_hand = Vector2(-4, -12)
-				front_foot = Vector2(1, -1)
-		"fall", "focus":
-			front_hand = Vector2(5, -9)
-			rear_hand = Vector2(-5, -9)
-			front_foot = Vector2(3, -1)
-			rear_foot = Vector2(-3, -2)
-			if pose == "focus":
-				front_foot = Vector2(2, -3)
-				rear_foot = Vector2(-2, -3)
-		"wall_cling", "wall_slide":
-			head.x += 1
-			front_hand = Vector2(4, -12)
-			rear_hand = Vector2(4, -8)
-			front_knee = Vector2(3, -5)
-			front_foot = Vector2(4, -3)
-			rear_foot = Vector2(-2, -1)
-			if pose == "wall_slide":
-				head.y += 1
-				front_hand.y += 1
-			if wall_cling_budget < 0.23:
-				accent = MAGENTA
-		"dash", "air_dash":
-			head = Vector2(0, -12)
-			torso = Rect2(-4, -9, 7, 4)
-			rear_hand = Vector2(-6, -8)
-			front_hand = Vector2(5, -7)
-			rear_knee = Vector2(-4, -4)
-			front_knee = Vector2(-1, -4)
-			rear_foot = Vector2(-6, -3)
-			front_foot = Vector2(-3, -1)
-			accent = CYAN if frame % 2 == 0 else MAGENTA
-			if detailed:
-				var smear: float = float(frame % 3) * 2.0
-				_box(origin, Rect2(-11 - smear, -10, 7 + smear, 2), Color(accent, 0.65), direction)
-				_box(origin, Rect2(-8 - smear, -6, 5 + smear, 1), accent, direction)
-		"strike":
-			head = Vector2(-3, -15)
-			torso = Rect2(-2, -10, 4, 6)
-			front_hand = Vector2(4, -12)
-			rear_hand = Vector2(-4, -12)
-			front_knee = Vector2(1, -4)
-			rear_knee = Vector2(-1, -4)
-			front_foot = Vector2(0, -1)
-			rear_foot = Vector2(-1, -1)
-			accent = MAGENTA
-		"hit":
-			head += Vector2(-2, 1)
-			rear_hand = Vector2(-6, -9)
-			front_hand = Vector2(5, -10)
-			front_foot.x = 4
-			accent = RED
-		"goal":
-			head.y -= 1
-			front_hand = Vector2(5, -15)
-			rear_hand = Vector2(-4, -6)
-	var shade: Color = tint.darkened(0.24) if detailed else tint
-	_limb(origin, Vector2(-1, -5), rear_knee, shade, direction)
-	_limb(origin, rear_knee, rear_foot, shade, direction)
-	_limb(origin, Vector2(-2, -8), rear_hand, shade, direction)
-	_box(origin, Rect2(rear_foot + Vector2(-1, 0), Vector2(3, 1)), shade, direction)
-	if detailed:
-		_box(origin, Rect2(head - Vector2.ONE, head_size + Vector2(2, 2)), INK, direction)
-		_box(origin, torso.grow(1), INK, direction)
-	_box(origin, torso, tint, direction)
-	_box(origin, Rect2(torso.position + Vector2(0, torso.size.y - 1), Vector2(torso.size.x, 1)), shade, direction)
-	_limb(origin, Vector2(1, -5), front_knee, tint, direction)
-	_limb(origin, front_knee, front_foot, tint, direction)
-	_box(origin, Rect2(front_foot + Vector2(-1, 0), Vector2(3, 1)), tint, direction)
-	_box(origin, Rect2(head, head_size), tint, direction)
-	_box(origin, Rect2(head + Vector2(0, 4), Vector2(5, 1)), shade, direction)
-	_limb(origin, torso.position + Vector2(torso.size.x - 1, 1), front_hand, tint, direction)
-	if detailed:
-		_box(origin, Rect2(head + Vector2(3, 2), Vector2(3, 2)), accent, direction)
-		_box(origin, Rect2(head + Vector2(5, 2), Vector2(1, 1)), WHITE, direction)
-		_box(origin, Rect2(torso.position + Vector2(1, 1), Vector2(1, 2)), accent, direction)
-		if pose == "strike":
-			_limb(origin, Vector2(-3, 1), Vector2(0, 5), accent, direction, 1)
-			_limb(origin, Vector2(0, 5), Vector2(3, 1), accent, direction, 1)
-		if pose == "double_jump" or pose == "focus":
-			for index in range(4):
-				var p: Vector2 = Vector2(-7 if index % 2 == 0 else 6, -15 if index < 2 else -2)
-				_box(origin, Rect2(p, Vector2(2, 1)), accent, direction)
-		if pose == "wall_cling" or pose == "wall_slide":
-			_box(origin, Rect2(5, -12, 1, 8), Color(accent, 0.7), direction)
-		if pose == "goal":
-			_box(origin, Rect2(4, -20, 3, 3), CYAN, direction)
-			_box(origin, Rect2(5, -19, 1, 1), INK, direction)
-
-
-func _box(origin: Vector2, rectangle: Rect2, color: Color, direction: int) -> void:
-	var result: Rect2 = rectangle
-	if direction < 0:
-		result.position.x = -rectangle.position.x - rectangle.size.x
-	result.position = (result.position + origin).round()
-	draw_rect(result, color)
-
-
-func _limb(origin: Vector2, start: Vector2, end: Vector2, color: Color, direction: int, width: int = 2) -> void:
-	var length: int = maxi(1, int(ceilf(maxf(absf(end.x - start.x), absf(end.y - start.y)))))
-	for index in range(length + 1):
-		var point: Vector2 = start.lerp(end, float(index) / float(length)).round()
-		_box(origin, Rect2(point - Vector2.ONE, Vector2(width, width)), color, direction)
-
-
-func _draw_death() -> void:
-	var progress: float = clampf(1.0 - _death_left / 0.22, 0.0, 1.0)
-	for index in range(10):
-		var angle: float = float(index) * TAU / 10.0
-		var point: Vector2 = Vector2(cos(angle), sin(angle)) * progress * 18.0 + Vector2(0, -7)
-		var tint: Color = WHITE if index % 3 == 0 else (CYAN if index % 2 == 0 else RED)
-		draw_rect(Rect2(point.round(), Vector2(2, 2)), Color(tint, 1.0 - progress))
-
