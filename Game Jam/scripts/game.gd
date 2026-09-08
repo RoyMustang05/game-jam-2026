@@ -197,6 +197,7 @@ func total_par_time() -> float:
 func load_level(index: int, from_checkpoint: bool = false) -> void:
 	_clear_world()
 	level_index = index
+	sound_bank.play_music(level_index)
 	attack_left = 0.0
 	attack_cooldown = 0.0
 	if not from_checkpoint:

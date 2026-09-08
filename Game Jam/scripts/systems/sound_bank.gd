@@ -4,14 +4,22 @@ extends Node
 
 const MIX_RATE: int = 22050
 const VOLUME_DB: float = -20.0
+const MUSIC_VOLUME_DB: PackedFloat32Array = [-14.0, -14.0, -14.0, -21.0]
 const SHORT_CUE: float = 0.07
 const LONG_CUE: float = 0.2
 const CUES: PackedStringArray = [
 	"jump", "double_jump", "wall_jump", "land", "dash", "strike",
 	"bounce", "break", "anchor", "freeze", "hit", "goal",
 ]
+const MUSIC: Array[AudioStream] = [
+	preload("res://music/level 1.mp3"),
+	preload("res://music/level 2.mp3"),
+	preload("res://music/level 3.mp3"),
+	preload("res://music/level 4.mp3"),
+]
 
 var sfx: AudioStreamPlayer
+var music: AudioStreamPlayer
 var sounds: Dictionary = {}
 
 
@@ -19,6 +27,10 @@ func _ready() -> void:
 	sfx = AudioStreamPlayer.new()
 	sfx.volume_db = VOLUME_DB
 	add_child(sfx)
+	music = AudioStreamPlayer.new()
+	music.volume_db = MUSIC_VOLUME_DB[0]
+	music.finished.connect(_restart_music)
+	add_child(music)
 	for cue in CUES:
 		sounds[cue] = _render(cue)
 
@@ -28,6 +40,25 @@ func play(cue: String) -> void:
 		return
 	sfx.stream = sounds[cue]
 	sfx.play()
+
+
+func play_music(level_index: int) -> void:
+	if level_index < 0 or level_index >= MUSIC.size():
+		music.stop()
+		music.stream = null
+		return
+	var next_track := MUSIC[level_index]
+	music.volume_db = MUSIC_VOLUME_DB[level_index]
+	if music.stream == next_track and music.playing:
+		return
+	music.stop()
+	music.stream = next_track
+	music.play()
+
+
+func _restart_music() -> void:
+	if music.stream != null:
+		music.play()
 
 
 ## Frequency sweep per cue, shaped by a quadratic decay envelope.
