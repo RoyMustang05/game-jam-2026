@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/editor/room_object.gd" id="1_iuhx4"]
+
+[node name="MovingPlatform" type="Node2D"]
+script = ExtResource("1_iuhx4")
+kind = "MovingPlatform"
+size = Vector2(32, 8)
+speed = 20.0
