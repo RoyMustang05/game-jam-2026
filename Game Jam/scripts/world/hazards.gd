@@ -63,7 +63,7 @@ func setup(data: Dictionary, index: int) -> void:
 	for entry in data.get("watchers", []):
 		var watcher: Dictionary = entry.duplicate(true)
 		watcher["pos"] = entry.get("pos", Vector2.ZERO)
-		watcher["interval"] = maxf(float(entry.get("interval", 2.0)), 0.1)
+		watcher["interval"] = 1.0
 		watcher["timer"] = fposmod(float(entry.get("phase", 0.0)), 1.0) * float(watcher.interval)
 		watcher["speed"] = entry.get("speed", 55.0)
 		watcher["range"] = float(entry.get("range", 190.0))

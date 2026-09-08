@@ -11,7 +11,7 @@ const MUTED := Color("a6b3bf")
 var game: Node2D
 
 func _draw() -> void:
-	if game.state == "menu":
+	if game.state in ["menu", "story"]:
 		return
 	draw_rect(Rect2(0, 0, 320, 28), INK)
 	draw_line(Vector2(8, 27), Vector2(312, 27), Color("263740"))
@@ -67,7 +67,7 @@ func _draw() -> void:
 		_panel("PAUSED", "SPACE: JUMP x2 / WALL + JUMP\nDOWN + SHIFT: STRIKE / J: MELEE", "ENTER / ESC  RESUME", CYAN)
 		DrawText.center(self, 149, "HOLD X IN AIR TO FREEZE AND PLAN", 9, CYAN)
 	elif game.state == "clear":
-		_panel("TIMELINE RESTORED", "%s  /  %.2fs active" % [String(game.data.title), game.level_world], "ENTER / SPACE  NEXT ROOM", GOLD)
+		_panel("TIMELINE RESTORED", "%s  /  %.2fs active" % [String(game.data.title), game.level_world], "ENTER / ESPACIO  REPETIR NIVEL", GOLD)
 	elif game.state == "complete":
 		_draw_completion()
 

@@ -73,6 +73,8 @@ var _death_left: float = 0.0
 var _finished: bool = false
 var _dead: bool = false
 var _pending_action: String = ""
+var costume: int = 0
+var high_resolution: bool = false
 var effects := PlayerEffects.new()
 ## Which movement rule produces velocity this frame. See player_states/.
 var motion := StateMachine.new()
@@ -408,21 +410,26 @@ func _advance_effects(delta: float, previous_position: Vector2, dash_started: bo
 
 
 func _draw() -> void:
-	effects.draw(self, position)
+	if not high_resolution:
+		draw_visual(self)
+
+
+func draw_visual(canvas: CanvasItem) -> void:
+	effects.draw(canvas, position, costume)
 	if animation_state == "death":
-		Figure.death(self, clampf(1.0 - _death_left / 0.22, 0.0, 1.0))
+		Figure.death(canvas, clampf(1.0 - _death_left / 0.22, 0.0, 1.0))
 		return
 	var frame: int = int(_motion_clock * 19.0) % 8
 	var tint: Color = WHITE if animation_state != "hit" else RED
 	var pose: String = "melee" if melee_pose > 0 else animation_state
-	Figure.figure(self, Vector2.ZERO, facing, tint, pose, frame, true, _visual_clock, wall_cling_budget)
+	Figure.figure(canvas, Vector2.ZERO, facing, tint, pose, frame, true, _visual_clock, wall_cling_budget, costume)
 	if melee_pose > 0.08 and melee_pose < 0.23:
 		var center := Vector2(facing*12,-15)
-		draw_arc(center,13,-1.2 if facing > 0 else PI-1.2,1.2 if facing > 0 else PI+1.2,7,CYAN,2)
-		draw_line(Vector2(facing*5,-9),Vector2(facing*24,-19),WHITE,1)
+		canvas.draw_arc(center,13,-1.2 if facing > 0 else PI-1.2,1.2 if facing > 0 else PI+1.2,7,CYAN,2)
+		canvas.draw_line(Vector2(facing*5,-9),Vector2(facing*24,-19),WHITE,1)
 	if _spawn_left > 0.0:
 		var width: float = ceilf(_spawn_left * 24.0)
 		var alpha: float = _spawn_left * 2.0
-		draw_rect(Rect2(-width, -16, width * 2.0, 17), Color(CYAN, alpha), false)
-		draw_line(Vector2(-width - 3, -7), Vector2(-width, -7), Color(CYAN, alpha))
-		draw_line(Vector2(width, -7), Vector2(width + 3, -7), Color(CYAN, alpha))
+		canvas.draw_rect(Rect2(-width, -16, width * 2.0, 17), Color(CYAN, alpha), false)
+		canvas.draw_line(Vector2(-width - 3, -7), Vector2(-width, -7), Color(CYAN, alpha))
+		canvas.draw_line(Vector2(width, -7), Vector2(width + 3, -7), Color(CYAN, alpha))

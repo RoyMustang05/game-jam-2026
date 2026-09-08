@@ -10,6 +10,7 @@ const LONG_CUE: float = 0.2
 const CUES: PackedStringArray = [
 	"jump", "double_jump", "wall_jump", "land", "dash", "strike",
 	"bounce", "break", "anchor", "freeze", "hit", "goal",
+	"portal_open", "portal_whoosh", "portal_arrive",
 ]
 const MUSIC: Array[AudioStream] = [
 	preload("res://music/level 1.mp3"),
@@ -81,6 +82,8 @@ func _frequency(cue: String, t: float) -> float:
 
 func _render(cue: String) -> AudioStreamWAV:
 	var duration: float = LONG_CUE if cue == "goal" else SHORT_CUE
+	if cue.begins_with("portal_"):
+		return _render_portal(cue)
 	var count: int = int(MIX_RATE * duration)
 	var bytes := PackedByteArray()
 	bytes.resize(count * 2)
@@ -89,6 +92,32 @@ func _render(cue: String) -> AudioStreamWAV:
 		var envelope: float = pow(1.0 - float(i) / float(count), 2.0)
 		var sample: int = int(sin(TAU * _frequency(cue, t) * t) * envelope * 12000)
 		bytes.encode_s16(i * 2, sample)
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = MIX_RATE
+	stream.data = bytes
+	return stream
+
+
+## Original soft sine/noise sweeps; share the existing Master bus and -20 dB gain.
+func _render_portal(cue: String) -> AudioStreamWAV:
+	var duration: float = 0.4 if cue == "portal_open" else (0.8 if cue == "portal_whoosh" else 0.5)
+	var count: int = int(MIX_RATE * duration)
+	var bytes := PackedByteArray()
+	bytes.resize(count * 2)
+	var phase: float = 0.0
+	var noise: float = 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2026
+	for i in range(count):
+		var t: float = float(i) / MIX_RATE
+		var p: float = t / duration
+		var frequency: float = lerpf(120.0, 420.0, p) if cue == "portal_open" else (lerpf(180.0, 1200.0, p * p) if cue == "portal_whoosh" else lerpf(880.0, 440.0, p))
+		phase += TAU * frequency / MIX_RATE
+		noise = lerpf(noise, rng.randf_range(-1, 1), 0.15)
+		var envelope: float = smoothstep(0.0, 0.08, p) * pow(1.0 - p, 0.75)
+		var signal_value: float = sin(phase) * 0.48 + sin(phase * 1.5) * 0.22 + noise * (0.6 if cue == "portal_whoosh" else 0.12)
+		bytes.encode_s16(i * 2, int(clampf(signal_value * envelope, -0.9, 0.9) * 16000))
 	var stream := AudioStreamWAV.new()
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
 	stream.mix_rate = MIX_RATE
