@@ -228,7 +228,10 @@ func _game_checks() -> void:
 	_check(game.state == "menu", "project opens at main menu")
 	_action("confirm")
 	await _frames(5)
-	_check(game.state == "playing" and game.level_index == 0, "menu confirm begins first room")
+	_check(game.state == "story", "menu confirm begins illustrated intro")
+	_action("pause_game")
+	await _frames(5)
+	_check(game.state == "playing" and game.level_index == 0, "skip begins first room")
 	var timer_before: float = game.remaining
 	var real_before: float = game.total_real
 	var world_before: float = game.total_world
@@ -317,7 +320,7 @@ func _game_checks() -> void:
 		game.player.position = Vector2(game.data.goal)
 		game.player.velocity = Vector2.ZERO
 		await _frames(1)
-		_check(game.state == "clear", "exit advances room %d"%(index+1))
+		_check(game.state == "portal", "exit opens portal in room %d"%(index+1))
 	game.load_level(3)
 	_check(is_instance_valid(game.dragon) and game.data.title == "THE LAST FLAME", "fourth level contains Pyrax")
 	_check(GameScript.ROOM_COUNT == 4, "campaign has exactly four levels")

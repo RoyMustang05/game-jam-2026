@@ -55,3 +55,44 @@ godot --headless --script res://tests/route_tests.gd
 ```
 
 Resultados de la última corrida en **TEST-REPORT.md**.
+
+## Presentación y editor (septiembre 2026)
+
+**Jugar** abre una introducción ilustrada de unos 13,5 segundos. **Enter / Espacio**
+avanza cada momento; **Esc** la omite. El reloj y la simulación empiezan después.
+Los reintentos, F6 y los cambios de nivel no reproducen la historia.
+
+Las salidas de los tres primeros niveles abren automáticamente un portal de
+2,35 segundos; el último conserva el final de campaña. Durante el viaje se
+congelan los contadores y la simulación. Las teclas mantenidas durante la
+secuencia deben soltarse antes de reutilizarlas.
+
+Milo conserva su casco marfil, visor cian y cronómetro en todas las animaciones:
+
+| Nivel / era | Vestuario |
+| --- | --- |
+| 01 / Prehistoria | Túnica de piel cosida, hombrera de pelo, bolsa de cuero |
+| 02 / Antigüedad | Quitón de lino, paño carmesí, broche de bronce y correas |
+| 03 / Industrial | Chaqueta de trabajo, arnés y gafas de cobre |
+| 04 / Futuro colapsado | Traje de supervivencia, placas y circuitos luminosos |
+
+**Editor de niveles** en el menú permite elegir una de las cuatro escenas y
+abrirla en el mismo ejecutable de Godot instalado que está ejecutando el juego.
+Se puede navegar con flechas/Tab y Enter, o con el ratón. En una exportación,
+se explica cómo abrir el proyecto fuente en Godot. No genera ni migra niveles.
+
+En Godot: elige `rooms/room_01.tscn` a `room_04.tscn`, selecciona **Floors** para
+pintar o arrastra objetos desde **assets**. **Ctrl+S** guarda, **F6** juega esa
+escena, **F8** detiene, **F5** juega la campaña. Vuelve a la ventana del juego y
+pulsa **Volver al menú**; al iniciar otra partida se cargan las escenas guardadas.
+Consulta [LEVEL-DESIGN.md](LEVEL-DESIGN.md) para los detalles de autoría.
+
+Linux (Godot 4.6.2 o compatible, OpenGL Compatibility):
+
+```bash
+godot --path "$HOME/Downloads/game-jam-2026/Game Jam"
+```
+
+Arte y procedencia: [assets/story/ARTWORK.md](assets/story/ARTWORK.md).
+Prueba de integración: `godot --path . --script tests/presentation_tests.gd -- --capture`.
+Las capturas de esta prueba se guardan en `/tmp/still-presentation`, fuera del repositorio.

@@ -62,3 +62,16 @@ To experiment freely, use **Scene → Save Scene As** and save a copy such as `r
 ## Version 0.4 additions
 
 The room root exposes Boss, Arena, and Retry Budget. Enable Boss only for a final arena; the supplied room_04 contains the tested arrangement. Pyrax belongs to the room system. Spike assets expose Lunge for deterministic crouch/lunge/recovery movement. Crusher.tscn exposes Size, Gate Period, and Phase. J is the new short temporal strike; X remains air focus. The four campaign layouts include taller wall climbs and condensed encounters.
+
+## Acceso desde el menú (Linux / Windows / macOS)
+
+Pulsa **Editor de niveles**, elige el nivel y pulsa **Abrir en Godot**. El botón
+abre la escena real en el ejecutable actual de Godot si es una ejecución del
+proyecto fuente. No necesita `.runtime`, rutas personales ni herramientas de
+migración. Las exportaciones muestran instrucciones para abrir `project.godot`
+en Godot y elegir `rooms/room_01.tscn` a `rooms/room_04.tscn`.
+
+**Ctrl+S** guarda; **F6** juega la escena seleccionada con el traje de su campo
+**Chapter**; **F8** termina la prueba; **F5** inicia el menú de campaña. Para
+volver al juego que abrió el editor, cambia a su ventana y pulsa **Volver al menú**.
+El menú no incluye un editor personalizado: la autoría se realiza en Godot.

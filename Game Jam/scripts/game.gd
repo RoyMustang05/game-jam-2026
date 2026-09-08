@@ -18,6 +18,9 @@ const Hud = preload("res://scripts/ui/hud.gd")
 const SoundBank = preload("res://scripts/systems/sound_bank.gd")
 const InputBindings = preload("res://scripts/systems/input_bindings.gd")
 
+const Cinematic = preload("res://scripts/ui/cinematic.gd")
+const TravelerLayer = preload("res://scripts/ui/traveler_layer.gd")
+
 const ROOM_COUNT: int = 4
 const WORLD_SIZE = Vector2i(320, 180)
 const DEFAULT_HEIGHT: float = 180.0
@@ -35,6 +38,10 @@ var menu_screen: Node2D
 var world_labels: Node2D
 var hud: Node2D
 var geometry: Node2D
+var cinematic: Node2D
+var prepared_room: PackedScene
+var blocked_actions: Array[String] = []
+var input_guard_frames: int = 0
 var sound_bank: Node
 
 # --- Room contents (rebuilt by load_level) -----------------------------------
@@ -109,6 +116,7 @@ func _ready() -> void:
 ## Only the world is rasterized at 320x180. The root canvas keeps these logical
 ## coordinates but renders UI/font outlines at the window resolution.
 func _build_render_stack() -> void:
+	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
 	world_viewport = SubViewport.new()
 	world_viewport.size = WORLD_SIZE
 	world_viewport.world_2d = World2D.new()
@@ -136,6 +144,9 @@ func _build_interface() -> void:
 	menu_screen = MenuScreen.new()
 	menu_screen.game = self
 	add_child(menu_screen)
+	var traveler_layer := TravelerLayer.new()
+	traveler_layer.game = self
+	add_child(traveler_layer)
 	var interface_layer := CanvasLayer.new()
 	add_child(interface_layer)
 	world_labels = WorldLabels.new()
@@ -144,9 +155,29 @@ func _build_interface() -> void:
 	hud = Hud.new()
 	hud.game = self
 	interface_layer.add_child(hud)
+	cinematic = Cinematic.new()
+	cinematic.game = self
+	interface_layer.add_child(cinematic)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if state == "menu" and menu_screen.editor_panel.visible:
+		return
+	if state == "portal":
+		get_viewport().set_input_as_handled()
+		return
+	if state == "story":
+		if event is InputEventKey and event.echo:
+			return
+		if event.is_action_pressed("pause_game"):
+			cinematic.finish_story()
+		elif event.is_action_pressed("confirm"):
+			cinematic.advance_story()
+		get_viewport().set_input_as_handled()
+		return
+	if input_guard_frames > 0 or (event.is_action_pressed("pause_game") and "pause_game" in blocked_actions) or (event.is_action_pressed("restart") and "restart" in blocked_actions):
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.echo:
 		return
 	if event.is_action_pressed("pause_game") and state == "playing":
@@ -164,13 +195,60 @@ func _unhandled_input(event: InputEvent) -> void:
 func confirm() -> void:
 	if paused:
 		paused = false
-	elif state == "menu" or state == "complete":
+	elif state == "menu":
+		start_new_game()
+	elif state == "complete":
 		start_run()
 	elif state == "clear":
-		load_level(level_index if not playtest_room_path.is_empty() else level_index + 1)
+		load_level(level_index)
+
+
+func start_new_game() -> void:
+	# Story belongs exclusively to the main-menu new-game entry point.
+	_reset_run_totals()
+	cinematic.start_story()
+	menu_screen.queue_redraw()
+
+
+func consume_cinematic_input() -> void:
+	input_guard_frames = 2
+	blocked_actions.clear()
+	for action: String in InputBindings.BINDINGS:
+		if Input.is_action_pressed(action):
+			blocked_actions.append(action)
+
+
+func _gameplay_command() -> Dictionary:
+	if test_mode:
+		return test_command
+	for i in range(blocked_actions.size() - 1, -1, -1):
+		if not Input.is_action_pressed(blocked_actions[i]):
+			blocked_actions.remove_at(i)
+	if blocked_actions.is_empty():
+		return {}
+	return {
+		"axis": _held("move_right") - _held("move_left"),
+		"vertical": _held("move_down") - _held("move_up"),
+		"jump": _pressed("jump"), "jump_held": bool(_held("jump")),
+		"dash": _pressed("dash"), "freeze_air": bool(_held("focus")),
+		"attack": _pressed("attack"),
+	}
+
+
+func _held(action: String) -> float:
+	return 1.0 if action not in blocked_actions and Input.is_action_pressed(action) else 0.0
+
+
+func _pressed(action: String) -> bool:
+	return action not in blocked_actions and Input.is_action_just_pressed(action)
 
 
 func start_run() -> void:
+	_reset_run_totals()
+	load_level(0)
+
+
+func _reset_run_totals() -> void:
 	boss_checkpoint = false
 	total_world = 0.0
 	total_real = 0.0
@@ -179,7 +257,6 @@ func start_run() -> void:
 	total_dash_cost = 0.0
 	total_dashes = 0
 	par_by_room.clear()
-	load_level(0)
 
 
 ## Sum of the par times of every room reached this run; used for the final rank.
@@ -222,7 +299,9 @@ func _clear_world() -> void:
 
 func _instance_room(index: int) -> void:
 	var room_path: String = playtest_room_path if not playtest_room_path.is_empty() else "res://rooms/room_%02d.tscn" % (index + 1)
-	authored_room = load(room_path).instantiate()
+	var room_scene: PackedScene = prepared_room if prepared_room != null else load(room_path)
+	prepared_room = null
+	authored_room = room_scene.instantiate()
 	world.add_child(authored_room)
 	data = authored_room.to_data()
 	if not playtest_room_path.is_empty():
@@ -284,6 +363,8 @@ func _build_systems() -> void:
 	mechanisms.setup(data)
 	mechanisms.set_checkpoint(checkpoint_index, checkpoint_position)
 	player = PlayerScript.new()
+	player.costume = chapter_index
+	player.high_resolution = true
 	world.add_child(player)
 	player.reset_at(checkpoint_position)
 	atmosphere = Atmosphere.new()
@@ -353,7 +434,7 @@ func _is_boss_room() -> bool:
 
 
 func _on_goal_body(body: Node2D) -> void:
-	if body == player:
+	if body == player and state == "playing":
 		goal_pending = true
 
 
@@ -368,7 +449,7 @@ func _process(delta: float) -> void:
 	dash_flash = maxf(0.0, dash_flash - delta)
 	anchor_flash = maxf(0.0, anchor_flash - delta)
 	intro_left = maxf(0.0, intro_left - delta)
-	if state == "playing" or state == "clear":
+	if state == "playing" and not paused and input_guard_frames == 0:
 		total_real += delta
 	if state == "playing" and is_instance_valid(player):
 		if is_instance_valid(dragon) and dragon.active:
@@ -387,7 +468,10 @@ func _process(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if state != "playing" or paused:
 		return
-	var command: Dictionary = test_command if test_mode else {}
+	if input_guard_frames > 0:
+		input_guard_frames -= 1
+		return
+	var command: Dictionary = _gameplay_command()
 	mechanisms.pre_player(player)
 	var committed: bool = _step_melee(delta, command)
 	var result: Dictionary = player.step(delta, command)
@@ -430,7 +514,7 @@ func _physics_process(delta: float) -> void:
 ## time running, so a stationary strike still costs the player time.
 func _step_melee(delta: float, command: Dictionary) -> bool:
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
-	var pressed: bool = bool(command.get("attack", false)) if test_mode else Input.is_action_just_pressed("attack")
+	var pressed: bool = bool(command.get("attack", false)) if not command.is_empty() else Input.is_action_just_pressed("attack")
 	if pressed and attack_cooldown <= 0.0:
 		attack_left = ATTACK_WINDOW
 		attack_cooldown = ATTACK_COOLDOWN
@@ -581,12 +665,15 @@ func die(reason: String) -> void:
 func finish_level() -> void:
 	if state != "playing":
 		return
-	state = "complete" if level_index == ROOM_COUNT - 1 else "clear"
+	state = "clear" if not playtest_room_path.is_empty() else ("complete" if level_index == ROOM_COUNT - 1 else "portal")
 	player.play_finish()
 	frozen = true
 	transition_lock = 0.3
 	level_completed.emit(level_index)
-	_play("goal")
+	if state == "portal":
+		cinematic.start_portal()
+	else:
+		_play("goal")
 
 
 func _play(sound_name: String) -> void:

@@ -7,7 +7,7 @@ var game: Node2D
 
 func _draw() -> void:
 	var data: Dictionary = game.data
-	if data.is_empty() or game.state == "menu":
+	if data.is_empty() or game.state in ["menu", "story"]:
 		return
 	draw_set_transform_matrix(game.world.get_global_transform_with_canvas())
 	if not bool(data.get("boss", false)):

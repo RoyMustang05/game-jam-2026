@@ -79,11 +79,11 @@ func advance(delta: float, previous_position: Vector2, ghosting: bool, pose: Str
 
 
 ## Drawn beneath the live figure, in the player's local space.
-func draw(canvas: CanvasItem, origin: Vector2) -> void:
+func draw(canvas: CanvasItem, origin: Vector2, costume: int = 0) -> void:
 	for ghost in trail:
 		var opacity: float = clampf(float(ghost.life) / GHOST_LIFE, 0.0, 1.0) * 0.42
 		var tint: Color = CYAN if int(ghost.frame) % 2 == 0 else MAGENTA
-		Figure.figure(canvas, (Vector2(ghost.position) - origin).round(), int(ghost.facing), Color(tint, opacity), String(ghost.pose), int(ghost.frame), false)
+		Figure.figure(canvas, (Vector2(ghost.position) - origin).round(), int(ghost.facing), Color(tint, opacity), String(ghost.pose), int(ghost.frame), false, 0.0, 1.0, costume)
 	for particle in particles:
 		var local_point: Vector2 = (Vector2(particle.pos) - origin).round()
 		var opacity: float = clampf(float(particle.life) / float(particle.max_life), 0.0, 1.0)
