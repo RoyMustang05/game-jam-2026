@@ -60,7 +60,7 @@ func _draw() -> void:
 		DrawText.center(self, 38, "PYRAX / THE LAST FLAME / II" if game.dragon.phase == 2 else "PYRAX / THE LAST FLAME / I", 8, GOLD)
 		for n in range(8):
 			draw_rect(Rect2(85 + n * 19, 41, 16, 3), RED if n < game.dragon.health else Color("30333d"))
-		var cue: String = {"prepare": "READ THE DRAGON / MOVE TO ADVANCE", "warning": ["BREATH: HIGH LEDGE OR FAR LEFT", "VOLLEY: SPACED LANES / FLOOR IS SAFE", "CLAW: LEAVE THE GOLD MARK"][game.dragon.attack], "attack": ["FIRE IS SOLID / USE HEIGHT", "EMBER LANES / STOP TO PLAN", "JUMP THE GROUND WAVE"][game.dragon.attack], "recover": "OPEN HEAD: J STRIKE / CYAN CELL REFILLS", "transition": "PHASE II / THE FURNACE AWAKENS", "defeat": "THE LAST FLAME FALLS"}.get(game.dragon.state, "")
+		var cue: String = _boss_cue(game.dragon)
 		draw_rect(Rect2(0, 165, 320, 15), INK)
 		DrawText.center(self, 175, cue, 8, CYAN if game.dragon.state == "recover" else GOLD)
 	if game.paused:
@@ -70,6 +70,19 @@ func _draw() -> void:
 		_panel("TIMELINE RESTORED", "%s  /  %.2fs active" % [String(game.data.title), game.level_world], "ENTER / SPACE  NEXT ROOM", GOLD)
 	elif game.state == "complete":
 		_draw_completion()
+
+## The two attack-dependent lines come from the pattern itself, so the HUD never
+## indexes an array by an attack number it would have to keep in sync.
+func _boss_cue(dragon: Node2D) -> String:
+	match dragon.state:
+		"prepare": return "READ THE DRAGON / MOVE TO ADVANCE"
+		"warning": return dragon.pattern().warning_cue()
+		"attack": return dragon.pattern().attack_cue()
+		"recover": return "OPEN HEAD: J STRIKE / CYAN CELL REFILLS"
+		"transition": return "PHASE II / THE FURNACE AWAKENS"
+		"defeat": return "THE LAST FLAME FALLS"
+	return ""
+
 
 func _instruction(y: float, value: String, color: Color = GOLD) -> float:
 	var paragraph := DrawText.paragraph(value, 284)
