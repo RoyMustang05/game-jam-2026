@@ -1,6 +1,6 @@
 @tool
 extends Node2D
-const Levels = preload("res://scripts/levels.gd")
+const Levels = preload("res://scripts/world/levels.gd")
 @export var title: String = "MY ROOM"
 @export_enum("Prehistory", "Antiquity", "Industrial", "Future Collapse") var chapter: int = 0
 @export_range(0,3) var room_index: int = 0

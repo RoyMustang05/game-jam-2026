@@ -5,7 +5,6 @@ const CYAN := Color("61e7ff")
 const PINK := Color("ff5fcb")
 const RED := Color("ff5a67")
 const GOLD := Color("ffd15c")
-const INK := Color("0d1013")
 const WHITE := Color("f8f8f2")
 
 var barriers: Array = []

@@ -1,9 +1,9 @@
 extends SceneTree
 ## Real Godot physics checks. Fixture teleports isolate mechanics; room teleports
 ## below validate flow/checkpoints only. Traversal has a separate route suite.
-const PlayerScript = preload("res://scripts/player.gd")
+const PlayerScript = preload("res://scripts/actors/player.gd")
 const GameScript = preload("res://scripts/game.gd")
-const MechanismsScript = preload("res://scripts/mechanisms.gd")
+const MechanismsScript = preload("res://scripts/world/mechanisms.gd")
 var game: Node2D
 var fixture: Node2D
 var actor: CharacterBody2D

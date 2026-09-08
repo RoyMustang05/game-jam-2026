@@ -1,8 +1,8 @@
 extends SceneTree
 ## Isolated deterministic world-delta checks; core/route tests cover real motion.
 
-const Mechanisms = preload("res://scripts/mechanisms.gd")
-const Hazards = preload("res://scripts/hazards.gd")
+const Mechanisms = preload("res://scripts/world/mechanisms.gd")
+const Hazards = preload("res://scripts/world/hazards.gd")
 
 class ProbePlayer extends CharacterBody2D:
 	var striking := false

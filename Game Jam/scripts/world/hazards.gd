@@ -4,9 +4,8 @@ extends Node2D
 const MAGENTA := Color("#FF5FCB")
 const CYAN := Color("#61E7FF")
 const RED := Color("#FF5A67")
-const YELLOW := Color("#FFD15C")
-const INK := Color("#0D1013")
 const WHITE := Color("#F8F8F2")
+const AssetArt = preload("res://scripts/world/asset_art.gd")
 const ECHO_DELAY := 1.7
 
 var spikes: Array = []
@@ -342,10 +341,10 @@ func _draw() -> void:
 
 
 func _draw_spike(spike: Dictionary) -> void:
-	preload("res://scripts/editor/asset_art.gd").spike(self, spike, epoch, world_time)
+	AssetArt.spike(self, spike, epoch, world_time)
 
 func _draw_watcher(watcher: Dictionary) -> void:
-	preload("res://scripts/editor/asset_art.gd").watcher(self, watcher, epoch, frozen)
+	AssetArt.watcher(self, watcher, epoch, frozen)
 
 func _draw_echo() -> void:
 	var p := echo_position.round()

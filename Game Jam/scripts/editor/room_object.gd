@@ -1,7 +1,7 @@
 @tool
 extends Node2D
 ## Drag this scene into a room. The room connects its ability to the world clock.
-const Art = preload("res://scripts/editor/asset_art.gd")
+const Art = preload("res://scripts/world/asset_art.gd")
 @export_enum("Spike", "Watcher", "MovingPlatform", "Spawn", "Exit", "Anchor", "PhaseBarrier", "FragileBarrier", "Gate", "Pad", "SlowField", "FastField", "Pit", "Sign", "Crusher") var kind: String = "Spike"
 @export_group("Shape")
 @export var size := Vector2(12, 14)

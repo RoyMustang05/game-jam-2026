@@ -6,7 +6,9 @@ const RED := Color("ff5a67")
 const CYAN := Color("61e7ff")
 const DARK := Color("351f31")
 const SCALE := Color("854339")
-const Geometry = preload("res://scripts/hazards.gd")
+## Swept segment/rect helpers are shared with the hazard system.
+const Geometry = preload("res://scripts/world/hazards.gd")
+const Atmosphere = preload("res://scripts/world/atmosphere.gd")
 var health := 8
 var phase := 1
 var active := false
@@ -31,7 +33,7 @@ var attacks_seen: Array[int] = []
 func setup(rect: Rect2) -> void:
 	arena = rect
 	position = arena.position
-	throat = preload("res://scripts/atmosphere.gd").make_light(FIRE,80,0.6)
+	throat = Atmosphere.make_light(FIRE,80,0.6)
 	add_child(throat)
 	throat.position = head_position()
 

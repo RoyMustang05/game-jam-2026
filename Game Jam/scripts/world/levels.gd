@@ -1,5 +1,11 @@
 extends RefCounted
-## Four encounter courses. Saved rooms are the runtime source of truth.
+## Two separate jobs live here:
+##
+## 1. draw_environment() / EPOCHS — the epoch backdrops, used at runtime by
+##    scripts/ui/level_geometry.gd and in the editor by room_definition.gd.
+## 2. build() — the original procedural course generator. The saved scenes in
+##    res://rooms/ are the runtime source of truth now, so build() is only used
+##    by tools/build_campaign.gd and tools/migrate_rooms.gd to (re)seed them.
 const TITLES = ["FIRST TICK", "EYES ON YOU", "BROKEN GEARS", "THE LAST FLAME"]
 const EPOCHS = ["PREHISTORY", "ANTIQUITY", "INDUSTRIAL", "FUTURE COLLAPSE"]
 const HINTS = ["STOP TO READ THE LUNGE. MOVE TO SURVIVE.", "GOLD AIM LOCKS BEFORE THE SHOT.", "WATCH THE LIGHTS. PACE TO MOVE MACHINERY.", "THE LAST FLAME / J: TEMPORAL STRIKE"]
@@ -89,14 +95,6 @@ static func _spike(d: Dictionary,row: int,a: float,b: float,phase: float) -> voi
 static func _watcher(d: Dictionary,row: int,x: float,phase: float) -> void:
 	d.watchers.append({"pos":Vector2(x,74+row*float(d.spacing)),"interval":2.7,"phase":phase,"speed":58.0,"range":168.0})
 
-static func colors(index: int) -> Array:
-	var palettes: Array = [
-		[Color("3B2A1A"), Color("2E4B3F"), Color("C97B3D")],
-		[Color("D8B26A"), Color("1B3A5C"), Color("A5502C")],
-		[Color("8C5A3C"), Color("4A4E54"), Color("4C6B4F")],
-		[Color("1A1A22"), Color("2E2E3A"), Color("A34B8B")]
-	]
-	return palettes[clampi(index, 0, 3)]
 
 
 static func draw_environment(canvas: Node2D, index: int, width: float, world_time: float) -> void:
@@ -277,9 +275,3 @@ static func _collapse(c: Node2D, width: float, world_time: float) -> void:
 		c.draw_polyline(PackedVector2Array([Vector2(x, 33), Vector2(x - 4, 57), Vector2(x + 3, 66), Vector2(x - 6, 89), Vector2(x - 2, 109)]), cyan, 1.0)
 		c.draw_polyline(PackedVector2Array([Vector2(x + 3, 55), Vector2(x + 7, 68), Vector2(x - 2, 85)]), magenta, 1.0)
 	c.draw_line(Vector2(0, 158), Vector2(width, 158), Color("19262D"))
-
-
-
-
-
-

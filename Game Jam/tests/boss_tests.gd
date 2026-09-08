@@ -1,6 +1,5 @@
 extends SceneTree
 const Game = preload("res://scripts/game.gd")
-const Dragon = preload("res://scripts/dragon.gd")
 var game: Node2D
 var count := 0
 var failures := 0

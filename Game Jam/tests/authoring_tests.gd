@@ -1,5 +1,8 @@
 extends SceneTree
 const Game = preload("res://scripts/game.gd")
+## Round-trips an edited room through ResourceSaver, so it needs a real file
+## inside the project. TEMP_ROOM is removed again before the suite exits.
+const TEMP_ROOM := "res://tests/authoring-temporary.tscn"
 var failures := 0
 func _initialize() -> void:
 	_run.call_deferred()
@@ -46,12 +49,12 @@ func _run() -> void:
 	patrol.patrol_offset = Vector2(72,0)
 	var packed := PackedScene.new()
 	packed.pack(room)
-	check(ResourceSaver.save(packed,"res://tests/authoring-temporary.tscn") == OK,"edited room saves")
+	check(ResourceSaver.save(packed,TEMP_ROOM) == OK,"edited room saves")
 	holder.remove_child(room)
 	room.free()
 	var game := Game.new()
 	game.test_mode = true
-	game.playtest_room_path = "res://tests/authoring-temporary.tscn"
+	game.playtest_room_path = TEMP_ROOM
 	root.add_child(game)
 	game.start_run()
 	await physics_frame
@@ -71,7 +74,7 @@ func _run() -> void:
 	check(game.hazards.spikes.back().pos == before,"new enemy obeys frozen world time")
 	game.finish_level()
 	game.confirm()
-	check(game.playtest_room_path == "res://tests/authoring-temporary.tscn" and game.hazards.watchers.size() == original_watchers+1,"playtest replay stays in edited room")
+	check(game.playtest_room_path == TEMP_ROOM and game.hazards.watchers.size() == original_watchers+1,"playtest replay stays in edited room")
 	root.remove_child(game)
 	game.free()
 	var standalone: Node2D = load("res://rooms/room_03.tscn").instantiate()
@@ -82,5 +85,6 @@ func _run() -> void:
 	for child in root.get_children():
 		if child.get_script() == Game: launched = child
 	check(is_instance_valid(launched) and launched.level_index == 2 and launched.state == "playing", "F6 launches selected room directly with correct chapter")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEMP_ROOM))
 	print("AUTHORING FAILURES: %d" % failures)
 	quit(1 if failures else 0)

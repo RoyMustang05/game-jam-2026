@@ -151,10 +151,6 @@ func refill_at_anchor() -> void:
 	queue_redraw()
 
 
-func bounce() -> void:
-	bounce_from_pad(270.0)
-
-
 func bounce_from_pad(strength: float = 270.0) -> void:
 	# A pad resolves after step; this guard prevents repeated overlap launches.
 	if not striking:
@@ -199,10 +195,6 @@ func play_hit() -> void:
 	active_motion = false
 	animation_state = "hit"
 	queue_redraw()
-
-
-func play_death() -> void:
-	play_hit()
 
 
 func step(delta: float, command: Dictionary = {}) -> Dictionary:

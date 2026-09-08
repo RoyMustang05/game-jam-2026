@@ -1,5 +1,5 @@
 extends SceneTree
-const Levels = preload("res://scripts/levels.gd")
+const Levels = preload("res://scripts/world/levels.gd")
 const Room = preload("res://scripts/editor/room_definition.gd")
 const ObjectAsset = preload("res://scripts/editor/room_object.gd")
 const NAMES = ["Spike", "Watcher", "MovingPlatform", "Spawn", "Exit", "Anchor", "PhaseBarrier", "FragileBarrier", "Gate", "Pad", "SlowField", "FastField", "Pit", "Sign", "Crusher"]
