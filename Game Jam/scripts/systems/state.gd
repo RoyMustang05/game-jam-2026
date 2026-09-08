@@ -52,3 +52,23 @@ func timeout() -> void:
 ## rebound directly, only on a real machine transition.
 func exit(_next: StringName) -> void:
 	pass
+
+
+# --- Frame-driven hooks ------------------------------------------------------
+# The hooks above suit a machine the host advances on a clock (Pyrax counts its
+# own age). The two below suit one the host advances every physics frame, where
+# the state decides how velocity is produced. A machine uses one set or the
+# other; nothing forces a state to answer both.
+
+
+## Produce this frame's movement. `frame` carries the inputs and the derived
+## context, and the state writes its outcome back into it. Return true to end
+## the frame immediately, skipping physics and post-move bookkeeping.
+func decide(_delta: float, _frame: Dictionary) -> bool:
+	return false
+
+
+## The animation this state shows. Replaces a cascade whose ordering used to be
+## the only record of which state outranked which.
+func pose() -> String:
+	return "idle"

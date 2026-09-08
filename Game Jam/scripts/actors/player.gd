@@ -4,6 +4,19 @@ extends CharacterBody2D
 ## so this file stays about movement.
 const Figure = preload("res://scripts/actors/milo_figure.gd")
 const PlayerEffects = preload("res://scripts/actors/player_effects.gd")
+const StateMachine = preload("res://scripts/systems/state_machine.gd")
+
+const MOTION_SCRIPTS := {
+	&"normal": preload("res://scripts/actors/player_states/normal.gd"),
+	&"dash": preload("res://scripts/actors/player_states/dash.gd"),
+	&"strike": preload("res://scripts/actors/player_states/strike.gd"),
+	&"focus": preload("res://scripts/actors/player_states/focus.gd"),
+	&"finished": preload("res://scripts/actors/player_states/finished.gd"),
+	&"dead": preload("res://scripts/actors/player_states/dead.gd"),
+}
+
+## Result of a frame Milo sat out entirely.
+const IDLE_RESULT := {"moving": false, "dash_started": false, "jumped": false, "distance": 0.0, "action": "", "landed": false}
 
 const RUN_SPEED: float = 105.0
 const ACCELERATION: float = 1300.0
@@ -61,6 +74,39 @@ var _finished: bool = false
 var _dead: bool = false
 var _pending_action: String = ""
 var effects := PlayerEffects.new()
+## Which movement rule produces velocity this frame. See player_states/.
+var motion := StateMachine.new()
+
+
+func _init() -> void:
+	motion.host = self
+	for motion_id: StringName in MOTION_SCRIPTS:
+		motion.add(motion_id, MOTION_SCRIPTS[motion_id].new())
+	motion.rebind(&"normal")
+
+
+## Switch with enter/exit. Out-of-band forces use rebind_motion instead.
+func change_motion(motion_id: StringName, frame: Dictionary = {}) -> void:
+	motion.change_to(motion_id, frame)
+
+
+## Switch without side effects, for changes another system already resolved.
+func rebind_motion(motion_id: StringName) -> void:
+	motion.rebind(motion_id)
+
+
+## Focus is a deliberate stillness: any input at all, or already being committed
+## to a dash or strike, disqualifies it. Shared by normal (to enter) and focus
+## (to decide whether to stay).
+func wants_focus(frame: Dictionary) -> bool:
+	return bool(frame.focus_held) \
+		and not bool(frame.was_grounded) \
+		and absf(float(frame.axis)) < 0.01 \
+		and absf(float(frame.vertical)) < 0.01 \
+		and not bool(frame.jump_pressed) \
+		and not bool(frame.dash_pressed) \
+		and dash_left <= 0.0 \
+		and not striking
 
 
 func _ready() -> void:
@@ -133,6 +179,7 @@ func reset_at(spawn_position: Vector2) -> void:
 	_dead = false
 	_pending_action = ""
 	effects.clear()
+	rebind_motion(&"normal")
 	animation_state = "respawn"
 	reset_physics_interpolation()
 	queue_redraw()
@@ -166,6 +213,7 @@ func bounce_from_pad(strength: float = 270.0) -> void:
 	_jump_cut_lock = 0.16
 	_coyote_left = 0.0
 	_pending_action = "bounce"
+	rebind_motion(&"normal")
 	_special("bounce", 0.15)
 	effects.impact_left = PlayerEffects.IMPACT_DURATION
 	_burst(Vector2.UP, CYAN, 16, 65.0)
@@ -181,6 +229,7 @@ func play_finish() -> void:
 	focusing = false
 	wall_clinging = false
 	active_motion = false
+	rebind_motion(&"finished")
 	animation_state = "goal"
 	queue_redraw()
 
@@ -191,171 +240,98 @@ func play_hit() -> void:
 	_death_left = 0.22
 	velocity = Vector2.ZERO
 	active_motion = false
+	rebind_motion(&"dead")
 	animation_state = "hit"
 	queue_redraw()
 
 
 func step(delta: float, command: Dictionary = {}) -> Dictionary:
+	# Terminal states sit the frame out completely: no timers, no input, no
+	# physics. Checked before the prologue so nothing ticks behind the scenes.
 	if _finished or _dead:
-		return {"moving": false, "dash_started": false, "jumped": false, "distance": 0.0, "action": "", "landed": false}
-	var axis: float = 0.0
-	var vertical: float = 0.0
-	var jump_pressed: bool = false
-	var jump_held: bool = false
-	var dash_pressed: bool = false
-	var cling_held: bool = true
-	var focus_held: bool = false
-	if command.is_empty():
-		axis = Input.get_axis("move_left", "move_right")
-		vertical = Input.get_axis("move_up", "move_down")
-		jump_pressed = Input.is_action_just_pressed("jump")
-		jump_held = Input.is_action_pressed("jump")
-		dash_pressed = Input.is_action_just_pressed("dash")
-		focus_held = Input.is_action_pressed("focus")
-	else:
-		axis = clampf(float(command.get("axis", 0.0)), -1.0, 1.0)
-		vertical = clampf(float(command.get("vertical", 0.0)), -1.0, 1.0)
-		jump_pressed = bool(command.get("jump", false))
-		jump_held = bool(command.get("jump_held", jump_pressed))
-		dash_pressed = bool(command.get("dash", false))
-		cling_held = bool(command.get("cling", true))
-		focus_held = bool(command.get("freeze_air", false))
-	if absf(axis) > 0.01 and _wall_recovery <= 0.0:
-		facing = 1 if axis > 0.0 else -1
+		return IDLE_RESULT.duplicate()
+	var frame: Dictionary = _read_command(command)
+	if absf(float(frame.axis)) > 0.01 and _wall_recovery <= 0.0:
+		facing = 1 if float(frame.axis) > 0.0 else -1
 	var was_grounded: bool = is_on_floor()
 	var old_velocity: Vector2 = velocity
-	var action: String = _pending_action
+	frame.action = _pending_action
 	_pending_action = ""
-	var jumped: bool = action == "bounce"
-	var dash_started: bool = false
-	_dash_cooldown = maxf(0.0, _dash_cooldown - delta)
-	_phase_left = maxf(0.0, _phase_left - delta)
-	_wall_recovery = maxf(0.0, _wall_recovery - delta)
-	_jump_cut_lock = maxf(0.0, _jump_cut_lock - delta)
-	_jump_buffer_left = maxf(0.0, _jump_buffer_left - delta)
+	frame.jumped = frame.action == "bounce"
+	frame.dash_started = false
+	_tick_timers(delta)
 	if _strike_landed:
 		striking = false
 		_strike_landed = false
 		_strike_left = 0.0
 		dash_left = 0.0
+		rebind_motion(&"normal")
 	if was_grounded:
 		_coyote_left = COYOTE_TIME
 		_reset_air_resources()
 	else:
 		_coyote_left = maxf(0.0, _coyote_left - delta)
-	if jump_pressed:
+	if bool(frame.jump_pressed):
 		_jump_buffer_left = JUMP_BUFFER_TIME
+	_derive_wall_context(frame, was_grounded)
+	if motion.current.decide(delta, frame):
+		_resolve_animation()
+		queue_redraw()
+		return IDLE_RESULT.duplicate()
+	return _integrate(delta, frame, was_grounded, old_velocity)
+
+
+## Live input and a scripted test command produce the same frame description,
+## so the routes in tests/route_tests.gd drive exactly the player a human does.
+func _read_command(command: Dictionary) -> Dictionary:
+	if command.is_empty():
+		return {
+			"axis": Input.get_axis("move_left", "move_right"),
+			"vertical": Input.get_axis("move_up", "move_down"),
+			"jump_pressed": Input.is_action_just_pressed("jump"),
+			"jump_held": Input.is_action_pressed("jump"),
+			"dash_pressed": Input.is_action_just_pressed("dash"),
+			"cling_held": true,
+			"focus_held": Input.is_action_pressed("focus"),
+		}
+	var jump_pressed: bool = bool(command.get("jump", false))
+	return {
+		"axis": clampf(float(command.get("axis", 0.0)), -1.0, 1.0),
+		"vertical": clampf(float(command.get("vertical", 0.0)), -1.0, 1.0),
+		"jump_pressed": jump_pressed,
+		"jump_held": bool(command.get("jump_held", jump_pressed)),
+		"dash_pressed": bool(command.get("dash", false)),
+		"cling_held": bool(command.get("cling", true)),
+		"focus_held": bool(command.get("freeze_air", false)),
+	}
+
+
+func _tick_timers(delta: float) -> void:
+	_dash_cooldown = maxf(0.0, _dash_cooldown - delta)
+	_phase_left = maxf(0.0, _phase_left - delta)
+	_wall_recovery = maxf(0.0, _wall_recovery - delta)
+	_jump_cut_lock = maxf(0.0, _jump_cut_lock - delta)
+	_jump_buffer_left = maxf(0.0, _jump_buffer_left - delta)
+
+
+func _derive_wall_context(frame: Dictionary, was_grounded: bool) -> void:
 	var normal_x: float = get_wall_normal().x if is_on_wall() else 0.0
-	var toward_wall: bool = axis * normal_x < -0.1
 	if absf(normal_x) > 0.5 and normal_x * _last_wall_jump_normal < -0.5:
 		# Alternating walls refresh grip; repeating one wall spends grip.
 		wall_cling_budget = 1.0
 		_last_wall_jump_normal = 0.0
-	var wall_available: bool = not was_grounded and toward_wall and cling_held and wall_cling_budget > 0.0 and _wall_recovery <= 0.0
-	var use_focus: bool = focus_held and not was_grounded and absf(axis) < 0.01 and absf(vertical) < 0.01 and not jump_pressed and not dash_pressed and dash_left <= 0.0 and not striking
-	if use_focus:
-		if not focusing:
-			_focus_velocity = velocity
-		focusing = true
-		wall_clinging = false
-		velocity = Vector2.ZERO
-		active_motion = false
-		_resolve_animation()
-		queue_redraw()
-		return {"moving": false, "dash_started": false, "jumped": false, "distance": 0.0, "action": "", "landed": false}
-	if focusing:
-		velocity = _focus_velocity
-		focusing = false
-	if dash_pressed and dash_charges > 0 and _dash_cooldown <= 0.0 and dash_left <= 0.0 and not striking:
-		dash_charges -= 1
-		dash_left = DASH_DURATION
-		_dash_cooldown = DASH_COOLDOWN
-		dash_started = true
-		wall_clinging = false
-		_wall_hold_time = 0.0
-		effects.begin_trail()
-		if vertical > 0.5 and not was_grounded:
-			striking = true
-			_strike_left = STRIKE_DURATION
-			_phase_left = 0.0
-			_dash_direction = Vector2.DOWN
-			velocity = Vector2(0.0, STRIKE_SPEED)
-			action = "strike"
-			_burst(Vector2.UP, MAGENTA, 8, 35.0)
-		else:
-			_dash_direction = Vector2(axis, vertical).normalized()
-			if _dash_direction == Vector2.ZERO:
-				_dash_direction = Vector2(float(facing), 0.0)
-			_phase_left = DASH_DURATION
-			velocity = _dash_direction * DASH_SPEED
-			action = "dash"
-			_burst(-_dash_direction, CYAN, 8, 45.0)
-	if striking:
-		velocity = Vector2(0.0, STRIKE_SPEED)
-		_strike_left = maxf(0.0, _strike_left - delta)
-		dash_left = maxf(0.0, dash_left - delta)
-		if _strike_left <= 0.0:
-			striking = false
-	elif dash_left > 0.0:
-		velocity = _dash_direction * DASH_SPEED
-		dash_left = maxf(0.0, dash_left - delta)
-	else:
-		if _wall_recovery <= 0.0:
-			var rate: float = ACCELERATION if absf(axis) > 0.01 else FRICTION
-			velocity.x = move_toward(velocity.x, axis * RUN_SPEED, rate * delta)
-		if absf(axis) <= 0.01 and absf(velocity.x) < 1.0:
-			velocity.x = 0.0
-		velocity.y = minf(velocity.y + GRAVITY * delta, FALL_LIMIT)
-		wall_clinging = false
-		if wall_available and velocity.y >= -35.0:
-			_wall_hold_time += delta
-			wall_clinging = true
-			if _wall_hold_time >= 0.20:
-				velocity.y = 0.0
-			else:
-				velocity.y = minf(velocity.y, 24.0)
-				wall_cling_budget = maxf(0.0, wall_cling_budget - delta)
-		else:
-			_wall_hold_time = 0.0
-		if _jump_buffer_left > 0.0 and _coyote_left > 0.0:
-			velocity.y = JUMP_SPEED
-			_jump_buffer_left = 0.0
-			_coyote_left = 0.0
-			jumped = true
-			action = "jump"
-			_special("takeoff", 0.07)
-			_burst(Vector2.DOWN, CYAN, 5, 20.0)
-		elif _jump_buffer_left > 0.0 and wall_available:
-			velocity = Vector2(normal_x * WALL_JUMP_SPEED.x, WALL_JUMP_SPEED.y)
-			facing = 1 if normal_x > 0.0 else -1
-			_wall_recovery = 0.12
-			_jump_cut_lock = 0.10
-			_wall_hold_time = 0.0
-			wall_clinging = false
-			wall_cling_budget = maxf(0.0, wall_cling_budget - 0.22)
-			_last_wall_jump_normal = normal_x
-			if not _wall_jump_refilled:
-				extra_jumps = 1
-				_wall_jump_refilled = true
-			_jump_buffer_left = 0.0
-			_coyote_left = 0.0
-			jumped = true
-			action = "wall_jump"
-			_special("wall_jump", 0.13)
-			_burst(Vector2(normal_x, -0.6), CYAN, 10, 42.0)
-		elif _jump_buffer_left > 0.0 and extra_jumps > 0 and not was_grounded:
-			extra_jumps -= 1
-			velocity.y = DOUBLE_JUMP_SPEED
-			_jump_buffer_left = 0.0
-			_jump_cut_lock = 0.04
-			_wall_hold_time = 0.0
-			wall_clinging = false
-			jumped = true
-			action = "double_jump"
-			_special("double_jump", 0.14)
-			_burst(Vector2.ZERO, MAGENTA, 12, 38.0)
-		elif not jump_held and velocity.y < -82.0 and _jump_cut_lock <= 0.0:
-			velocity.y = -82.0
+	frame.was_grounded = was_grounded
+	frame.normal_x = normal_x
+	frame.wall_available = not was_grounded \
+		and float(frame.axis) * normal_x < -0.1 \
+		and bool(frame.cling_held) \
+		and wall_cling_budget > 0.0 \
+		and _wall_recovery <= 0.0
+
+
+## Move, then the bookkeeping every state shares: landing, wall release, whether
+## this counted as motion, and the small grounded pose cues.
+func _integrate(delta: float, frame: Dictionary, was_grounded: bool, old_velocity: Vector2) -> Dictionary:
 	var previous_position: Vector2 = position
 	var impact_speed: float = velocity.y
 	move_and_slide()
@@ -371,25 +347,33 @@ func step(delta: float, command: Dictionary = {}) -> Dictionary:
 			_special("land", 0.11)
 			_burst(Vector2.UP, WHITE, 7, minf(impact_speed * 0.12, 42.0))
 			effects.impact_left = 0.10
-		if action.is_empty():
-			action = "land"
+		if String(frame.action).is_empty():
+			frame.action = "land"
 	if not is_on_wall():
 		wall_clinging = false
 		_wall_hold_time = 0.0
 	var airborne_motion: bool = not is_on_floor() and not is_on_ceiling() and absf(velocity.y) > 0.01
-	active_motion = distance > 0.025 or jumped or dash_started or airborne_motion
-	if is_on_floor() and not jumped and dash_left <= 0.0 and not striking:
-		if absf(axis) > 0.01 and absf(_last_axis) < 0.01 and absf(old_velocity.x) < 2.0:
-			_special("start", 0.05)
-		elif absf(old_velocity.x) > 45.0 and (absf(axis) < 0.01 or axis * old_velocity.x < 0.0) and _special_state != "skid":
-			_special("skid", 0.08)
-			_burst(Vector2(-signf(old_velocity.x), -0.3), CYAN, 4, 20.0)
-	_last_axis = axis
+	active_motion = distance > 0.025 or bool(frame.jumped) or bool(frame.dash_started) or airborne_motion
+	_ground_cues(frame, old_velocity)
+	_last_axis = frame.axis
 	if active_motion:
-		_advance_effects(delta, previous_position, dash_started)
+		_advance_effects(delta, previous_position, bool(frame.dash_started))
 	_resolve_animation()
 	queue_redraw()
-	return {"moving": active_motion, "dash_started": dash_started, "jumped": jumped, "distance": distance, "action": action, "landed": landed}
+	return {"moving": active_motion, "dash_started": frame.dash_started, "jumped": frame.jumped, "distance": distance, "action": frame.action, "landed": landed}
+
+
+## Two grounded flourishes: pushing off from a standstill, and skidding when
+## momentum is dropped or reversed.
+func _ground_cues(frame: Dictionary, old_velocity: Vector2) -> void:
+	if not is_on_floor() or bool(frame.jumped) or dash_left > 0.0 or striking:
+		return
+	var axis: float = frame.axis
+	if absf(axis) > 0.01 and absf(_last_axis) < 0.01 and absf(old_velocity.x) < 2.0:
+		_special("start", 0.05)
+	elif absf(old_velocity.x) > 45.0 and (absf(axis) < 0.01 or axis * old_velocity.x < 0.0) and _special_state != "skid":
+		_special("skid", 0.08)
+		_burst(Vector2(-signf(old_velocity.x), -0.3), CYAN, 4, 20.0)
 
 
 func _reset_air_resources() -> void:
@@ -406,29 +390,11 @@ func _special(state_name: String, duration: float) -> void:
 	_special_left = duration
 
 
+## The pose belongs to whichever state is producing movement. What used to be
+## an eleven-branch cascade, whose ordering was the only record of which state
+## outranked which, is now one question asked of the current state.
 func _resolve_animation() -> void:
-	if _dead:
-		animation_state = "hit" if _hit_left > 0.0 else "death"
-	elif _finished:
-		animation_state = "goal"
-	elif striking:
-		animation_state = "strike"
-	elif dash_left > 0.0:
-		animation_state = "dash" if is_on_floor() and absf(_dash_direction.y) < 0.1 else "air_dash"
-	elif focusing:
-		animation_state = "focus"
-	elif wall_clinging:
-		animation_state = "wall_cling" if absf(velocity.y) < 0.01 else "wall_slide"
-	elif _special_left > 0.0:
-		animation_state = _special_state
-	elif not is_on_floor():
-		animation_state = "rise" if velocity.y < 0.0 else "fall"
-	elif _spawn_left > 0.06 and not active_motion:
-		animation_state = "respawn"
-	elif absf(velocity.x) > 2.0:
-		animation_state = "run"
-	else:
-		animation_state = "idle"
+	animation_state = motion.current.pose()
 
 
 func _burst(direction: Vector2, tint: Color, count: int, strength: float) -> void:
