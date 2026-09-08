@@ -1,3 +1,4 @@
 .godot/
 .runtime/
 *.log
+tests/authoring-temporary.tscn

@@ -8,13 +8,17 @@
 
 config_version=5
 
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
 [application]
 
 config/name="STILL//MOVING"
 config/description="Move to create time. Stop to survive."
 config/version="0.4.0"
 run/main_scene="res://main.tscn"
-config/features=PackedStringArray("4.5", "GL Compatibility")
+config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [display]
 
@@ -23,7 +27,6 @@ window/size/viewport_height=180
 window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
 window/stretch/scale_mode="integer"
 window/size/min_width=640
 window/size/min_height=360
